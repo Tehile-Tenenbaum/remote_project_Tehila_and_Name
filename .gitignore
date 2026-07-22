@@ -8,6 +8,8 @@ a.out
 # Libraries (if you create any)
 *.so
 *.a
-
+assembler_test
+*.o
+*.am
 # Ignore VS Code settings folder (optional but recommended)
 .vscode/
