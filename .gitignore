@@ -1,0 +1,13 @@
+# Object files (compiled C files)
+*.o
+
+# Executables
+*.out
+a.out
+
+# Libraries (if you create any)
+*.so
+*.a
+
+# Ignore VS Code settings folder (optional but recommended)
+.vscode/
