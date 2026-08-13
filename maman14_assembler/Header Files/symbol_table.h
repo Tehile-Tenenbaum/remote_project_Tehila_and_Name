@@ -31,4 +31,6 @@ SymbolNode* find_symbol(SymbolNode *head, char *name);
 void free_symbol_table(SymbolNode *head);
 void update_data_symbols(SymbolNode *head, int ICF);
 void print_symbol_table(SymbolNode *head);
+int mark_symbol_as_entry(SymbolNode *head, char *name);
+int find_symbol_address(SymbolNode *head, const char *name, int *address);
 #endif /* SYMBOL_H */

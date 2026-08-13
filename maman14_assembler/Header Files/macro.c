@@ -28,7 +28,7 @@ boolean process_macros(char *base_filename) {
     char filename_am[MAX_LINE_LENGTH];
     char line[MAX_LINE_LENGTH];
     char first_word[MAX_LINE_LENGTH];
-    
+    char dummy[MAX_LINE_LENGTH];
     boolean error_found = FALSE;
     boolean inside_macro = FALSE;
     
@@ -95,7 +95,7 @@ boolean process_macros(char *base_filename) {
             
             /* Check if there is extra garbage after 'mcroend' */
             /* Using a dummy variables to check if a second word exists */
-            char dummy[MAX_LINE_LENGTH];
+
             if (sscanf(line, "%*s %s", dummy) == 1) {
                 printf("Error: Extraneous text after 'mcroend'.\n");
                 error_found = TRUE;

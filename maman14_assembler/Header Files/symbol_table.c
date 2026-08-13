@@ -111,3 +111,65 @@ void print_symbol_table(SymbolNode *head) {
     }
     printf("-------------------------\n");
 }
+/* 
+ * ---------------------------------------------------------
+ * Updates an existing symbol in the symbol table to mark it 
+ * as an entry point (.entry).
+ * This is a crucial step during Pass 2 of the assembler.
+ * 
+ * @param head - Pointer to the head of the symbol table list.
+ * @param name - The name of the symbol to update.
+ * @return int - 1 on success, 0 if the symbol was not found.
+ * ---------------------------------------------------------
+ */
+int mark_symbol_as_entry(SymbolNode *head, char *name) {
+    SymbolNode *current = head;
+    
+    /* Traverse the linked list */
+    while (current != NULL) {
+        if (strcmp(current->name, name) == 0) {
+            current->is_entry = 1; /* Turn on the entry flag */
+            return 1; /* Success */
+        }
+        current = current->next;
+    }
+    
+    /* Symbol was not found in the table */
+    fprintf(stderr, "Error: Symbol '%s' was declared as .entry but is never defined.\n", name);
+    return 0; /* Failure */
+}
+/* 
+ * ---------------------------------------------------------
+ * Searches for a symbol by name in the symbol table.
+ * If found, sets the *address pointer to the symbol's address
+ * and returns 1 (success). If not found, returns 0 (failure).
+ * 
+ * @param head    - Pointer to the head of the symbol table list.
+ * @param name    - The name of the symbol to find.
+ * @param address - Pointer to an int where the found address will be stored.
+ * @return int    - 1 on success, 0 if the symbol was not found.
+ * ---------------------------------------------------------
+ */
+int find_symbol_address(SymbolNode *head, const char *name, int *address) {
+    SymbolNode *current = head;
+    
+    /* Traverse the linked list until the end */
+    while (current != NULL) {
+        /* Compare the current node's name with the requested name */
+        if (strcmp(current->name, name) == 0) {
+            
+            /* Found it! Update the value pointed to by 'address' */
+            *address = current->address;
+            
+            return 1; /* Success */
+        }
+        
+        /* Move to the next node in the list */
+        current = current->next;
+    }
+    
+    /* If we reached here, the symbol is not in the table */
+    return 0; /* Failure */
+}
+
+ 

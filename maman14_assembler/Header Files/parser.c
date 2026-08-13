@@ -195,10 +195,17 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation) {
  * ---------------------------
  * Inserts a parsed numeric value or character into the data image array.
  */
+/* 
+ * Function: add_to_data_image
+ * ---------------------------
+ * Inserts a parsed numeric value or character into the data image linked list.
+ */
 void add_to_data_image(long value, int size_in_bytes, int *DC) {
     int i;
     for (i = 0; i < size_in_bytes; i++) {
-        data_image[*DC] = (value >> (i * 8)) & 0xFF;
+        unsigned char byte_val = (value >> (i * 8)) & 0xFF;
+        /* Call your function that adds a byte to the data linked list */
+        add_byte_to_data_list(byte_val, *DC); 
         (*DC)++; 
     }
 }
@@ -206,8 +213,10 @@ void add_to_data_image(long value, int size_in_bytes, int *DC) {
 /* 
  * Function: add_to_code_image
  * ---------------------------
- * Inserts an encoded machine code instruction word into the code image array.
+ * Inserts an encoded machine code instruction word into the instruction linked list.
  */
 void add_to_code_image(unsigned long machine_code, int *IC) {
-    code_image[*IC - IC_INIT_VALUE] = machine_code;
+    /* Call your function that adds an instruction node to the instruction linked list */
+    add_instruction_to_list(machine_code, *IC);
+    *IC += 4; /* Advance IC by 4 bytes per instruction */
 }
