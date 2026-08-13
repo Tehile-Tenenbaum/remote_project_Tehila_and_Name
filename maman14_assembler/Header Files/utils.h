@@ -2,6 +2,7 @@
 #define UTILS_H
 /* Assuming globals.h defines MAX_LINE_LENGTH, TRUE, FALSE, and boolean */
 #include "globals.h"
+#include "macro.h"
 /*
  * Checks if a given word is a reserved assembly word.
  * Returns TRUE if it is reserved, FALSE otherwise.
@@ -17,8 +18,8 @@ void skip_white_spaces(char *line, int *index);
  * Returns TRUE if the rest of the line is clean, FALSE if garbage is found.
  */
 boolean check_no_garbage(char *line, int current_index);
+boolean is_macro_name(char *name, MacroNode *macro_head);
+boolean is_valid_label_name(char *name);
 
-boolean is_data_directive(char *word);
-boolean is_entry_directive(char *word);
-boolean is_extern_directive(char *word);
+
 #endif /* UTILS_H */

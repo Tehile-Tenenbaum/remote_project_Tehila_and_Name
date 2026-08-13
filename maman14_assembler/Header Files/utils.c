@@ -2,6 +2,8 @@
 #include <string.h>
 #include <ctype.h>
 #include "utils.h"
+#include "macro.h"
+
 /*
  * Checks if a given word is a reserved assembly word.
  */

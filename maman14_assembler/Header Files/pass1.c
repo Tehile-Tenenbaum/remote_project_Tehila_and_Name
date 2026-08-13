@@ -4,16 +4,12 @@
 #include "globals.h"
 #include "symbol_table.h"
 #include "pass1.h"
+#include "parser.h"
+#include "utils.h"
 #define IC_INIT_VALUE 100
 #define DC_INIT_VALUE 0
 
 /* Helper functions assumed to be implemented in parsing modules */
-extern boolean is_data_directive(char *word);
-extern boolean is_extern_directive(char *word);
-extern boolean is_entry_directive(char *word);
-extern boolean process_data_directive(char *line, int *index, int *DC, char *directive);
-extern boolean process_instruction(char *line, int *index, int *IC, char *operation);
-
 /*
  * Function: execute_pass1
  * -----------------------
@@ -34,7 +30,8 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, int *ICF, int *
     int DC = DC_INIT_VALUE;   
     int line_number = 0;
     boolean error_found = FALSE;
-
+   char ext_label[MAX_LABEL_LENGTH];
+ char current_word[MAX_LINE_LENGTH];
     strcpy(file_with_extension, filename);
     strcat(file_with_extension, ".am");
 
@@ -60,7 +57,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, int *ICF, int *
         }
         
         /* Step 4: Check if the first field is a label */
-        if (get_next_word(line, &index, current_word)) {
+        if (sscanf(&line[index], "%s", first_word) == 1) {
             if (first_word[strlen(first_word) - 1] == ':') {
                 /* Step 5: Turn on "has label" flag */
                 has_label = TRUE;
@@ -80,7 +77,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, int *ICF, int *
         }
         
         /* Read the next word (or first word if no label) to determine sentence type */
-        char current_word[MAX_LINE_LENGTH];
+       
         if (sscanf(&line[index], "%s", current_word) != 1) {
             continue; /* Empty line after label */
         }
@@ -93,7 +90,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, int *ICF, int *
                     printf("Error at line %d: Label '%s' already defined\n", line_number, label_name);
                     error_found = TRUE;
                 } else {
-                    add_symbol(symbol_table, label_name, DC, ATTRIBUTE_DATA);
+                    add_symbol(symbol_table, label_name, DC, SYMBOL_TYPE_DATA);
                 }
             }
             /* Step 8: Identify data type, encode to data image, update DC */
@@ -114,7 +111,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, int *ICF, int *
             
             /* Step 11: If .extern, insert operand to symbol table with attribute 'external' */
             if (is_extern_directive(current_word)) {
-                char ext_label[MAX_LABEL_LENGTH];
+
                 index += strlen(current_word);
                 skip_white_spaces(line, &index);
                 
@@ -123,7 +120,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, int *ICF, int *
                          printf("Error at line %d: Invalid extern label\n", line_number);
                          error_found = TRUE;
                     } else {
-                         add_symbol(symbol_table, ext_label, 0, ATTRIBUTE_EXTERNAL);
+                         add_symbol(symbol_table, ext_label, 0, SYMBOL_TYPE_EXTERNAL);
                     }
                 }
             }
@@ -137,7 +134,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, int *ICF, int *
                 printf("Error at line %d: Label '%s' already defined\n", line_number, label_name);
                 error_found = TRUE;
             } else {
-                add_symbol(symbol_table, label_name, IC, ATTRIBUTE_CODE);
+                add_symbol(symbol_table, label_name, IC, SYMBOL_TYPE_CODE);
             }
         }
         

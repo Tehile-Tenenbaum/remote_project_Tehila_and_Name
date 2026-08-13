@@ -3,6 +3,7 @@
 #include <string.h>
 #include "globals.h"
 #include "symbol_table.h"
+#include "utils.h"
 
 /*
  * Searches for a symbol by name in the symbol table.
@@ -28,7 +29,7 @@ SymbolNode* find_symbol(SymbolNode *head, char *name) {
  * Validates symbol length and checks for duplicates.
  * Returns TRUE on success, or FALSE if validation or allocation failed.
  */
-boolean add_symbol(SymbolNode **head, char *name, int address, SymbolType type) {
+boolean add_symbol(SymbolNode **head, char *name, int address, int type) {
     SymbolNode *new_node;
 
     /* 1. Validation: Check if the symbol name exceeds the maximum allowed length (31 characters) */
@@ -94,10 +95,19 @@ void update_data_symbols(SymbolNode *head, int ICF) {
     /* עוברים על כל הצמתים ברשימה המקושרת */
     while (current != NULL) {
         /* אם המאפיין של הסמל הוא נתונים */
-        if (current->attribute == ATTRIBUTE_DATA) {
-            /* מוסיפים לערך שלו את ICF */
-            current->value += ICF;
-        }
+        if (current->type == SYMBOL_TYPE_DATA) {
+    current->address += ICF;
+}
         current = current->next;
     }
+}
+void print_symbol_table(SymbolNode *head) {
+    SymbolNode *current = head;
+    printf("\n--- SYMBOL TABLE DUMP ---\n");
+    while (current != NULL) {
+        printf("Symbol Name: %s | Address: %d | Type: %d\n", 
+               current->name, current->address, current->type);
+        current = current->next;
+    }
+    printf("-------------------------\n");
 }

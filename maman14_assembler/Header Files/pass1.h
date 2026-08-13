@@ -12,6 +12,6 @@
  * @param symbol_table A pointer to the head of the symbol table.
  * @return TRUE (1) if the first pass completed successfully without errors, FALSE (0) otherwise.
  */
-boolean execute_pass1(char *filename, SymbolNode **symbol_table);
+boolean execute_pass1(char *filename, SymbolNode **symbol_table, int *ICF, int *DCF);
 
 #endif /* PASS1_H */
