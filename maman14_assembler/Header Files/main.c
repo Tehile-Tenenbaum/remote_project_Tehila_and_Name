@@ -19,7 +19,8 @@ boolean execute_pre_assembler(const char *filename);
 
 int main(int argc, char *argv[]) {
     int i;
-
+InstructionNode *inst_head = NULL;
+DataNode *data_head = NULL;
     /* Check if the user provided any files */
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <file1> <file2> ...\n", argv[0]);
@@ -52,7 +53,7 @@ int main(int argc, char *argv[]) {
 
         /* Step 2: Pass 1 */
         /* Reads filename.am, builds symbol table, and partially builds images */
-        if (!execute_pass1(filename, &symbol_table, &ICF, &DCF)) {
+        if (!execute_pass1(filename, &symbol_table, &inst_head, &data_head, &ICF, &DCF)) {
             printf("Errors found in Pass 1. Skipping file '%s'.\n", filename);
             /* Free memory before skipping */
             free_symbol_table(symbol_table);

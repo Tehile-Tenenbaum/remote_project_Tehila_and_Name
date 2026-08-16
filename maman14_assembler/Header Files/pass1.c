@@ -20,7 +20,7 @@
  * @param DCF: Pointer to store the final Data Counter.
  * @return: TRUE if no errors were found, FALSE otherwise.
  */
-boolean execute_pass1(char *filename, SymbolNode **symbol_table, int *ICF, int *DCF) {
+boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode **inst_head, DataNode **data_head, int *ICF, int *DCF) {
     FILE *file;
     char line[MAX_LINE_LENGTH];
     char file_with_extension[MAX_LINE_LENGTH];
@@ -95,7 +95,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, int *ICF, int *
             }
             /* Step 8: Identify data type, encode to data image, update DC */
             index += strlen(current_word);
-            if (!process_data_directive(line, &index, &DC, current_word)) {
+            if (!process_data_directive(line, &index, &DC, current_word, data_head)) {
                 printf("Error at line %d: Invalid data directive syntax\n", line_number);
                 error_found = TRUE;
             }
@@ -140,7 +140,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, int *ICF, int *
         
         /* Step 14 & 16: Encode instruction partially, update IC by 4 */
         index += strlen(current_word);
-        if (!process_instruction(line, &index, &IC, current_word)) {
+       if (!process_instruction(line, &index, &IC, current_word, inst_head)) {
             printf("Error at line %d: Invalid instruction syntax\n", line_number);
             error_found = TRUE;
         } else {

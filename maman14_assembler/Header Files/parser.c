@@ -5,10 +5,8 @@
 #include "globals.h"
 #include "parser.h"
 #include "utils.h"
-
+#include "image.h"
 /* Declarations of external functions for adding data/code and skipping spaces */
-extern void add_to_data_image(long value, int size_in_bytes, int *DC);
-extern void add_to_code_image(unsigned long machine_code, int *IC);
 extern void skip_white_spaces(char *line, int *index);
 /*
  * Function: is_data_directive
@@ -49,87 +47,65 @@ boolean is_entry_directive(char *word) {
 /*
  * Function: process_data_directive
  * --------------------------------
- * Parses numeric operands or strings for data directives (.db, .dh, .dw, .asciz)
- * using standard sscanf, and encodes them into the data image while updating DC.
- * 
- * @param line: The full string of the current line.
- * @param index: Pointer to the current index in the line (right after the directive).
- * @param DC: Pointer to the Data Counter.
- * @param directive: The directive name (e.g., ".db", ".asciz").
- * @return: TRUE if parsing succeeded without syntax errors, FALSE otherwise.
  */
-boolean process_data_directive(char *line, int *index, int *DC, char *directive) {
+boolean process_data_directive(char *line, int *index, int *DC, char *directive, DataNode **data_head) {
     int size_in_bytes = 1; /* Default size for .db */
     
-    /* 1. Skip spaces after the directive */
     skip_white_spaces(line, index);
 
-    /* 2. Handle .asciz (String directive) */
     if (strcmp(directive, ".asciz") == 0) {
         if (line[*index] != '"') {
-            return FALSE; /* Error: String must start with double quotes */
+            return FALSE;
         }
-        (*index)++; /* Skip the opening quote */
+        (*index)++;
         
-        /* Read characters until the closing quote or end of line */
         while (line[*index] != '"' && line[*index] != '\0' && line[*index] != '\n' && line[*index] != '\r') {
-            add_to_data_image((long)line[*index], 1, DC);
+            add_to_data_image((long)line[*index], 1, DC, data_head);
             (*index)++;
         }
         
         if (line[*index] != '"') {
-            return FALSE; /* Error: Missing closing quote */
+            return FALSE;
         }
-        (*index)++; /* Skip the closing quote */
+        (*index)++;
         
-        /* Add the null terminator '\0' at the end of the string */
-        add_to_data_image(0, 1, DC); 
+        add_to_data_image(0, 1, DC, data_head); 
         return TRUE;
     }
 
-    /* 3. Determine size for numeric directives */
     if (strcmp(directive, ".dh") == 0) {
-        size_in_bytes = 2; /* Half-word */
+        size_in_bytes = 2;
     } else if (strcmp(directive, ".dw") == 0) {
-        size_in_bytes = 4; /* Word */
+        size_in_bytes = 4;
     }
 
-    /* 4. Loop to read all comma-separated numbers using standard sscanf */
     while (line[*index] != '\0' && line[*index] != '\n' && line[*index] != '\r') {
         long value;
         int chars_read = 0;
         
         skip_white_spaces(line, index);
         
-        /* Check if we hit the end of the line unexpectedly */
         if (line[*index] == '\0' || line[*index] == '\n' || line[*index] == '\r') {
             break;
         }
 
-        /* Read the number and track consumed characters using %n */
         if (sscanf(&line[*index], "%ld%n", &value, &chars_read) != 1) {
-            return FALSE; /* Error: Expected a valid number */
+            return FALSE;
         }
         
-        /* Advance the index by the number of characters read */
         *index += chars_read; 
+        add_to_data_image(value, size_in_bytes, DC, data_head);
         
-        /* Add the parsed number to the data image */
-        add_to_data_image(value, size_in_bytes, DC);
-        
-        /* 5. Handle commas between numbers */
         skip_white_spaces(line, index);
         
         if (line[*index] == ',') {
-            (*index)++; /* Skip the comma */
+            (*index)++;
             skip_white_spaces(line, index);
-            
-            /* Error if the line ends immediately after a comma */
             if (line[*index] == '\0' || line[*index] == '\n' || line[*index] == '\r') {
                 return FALSE; 
             }
         } else if (line[*index] != '\0' && line[*index] != '\n' && line[*index] != '\r') {
-            return FALSE; /* Error: Missing comma between numbers */
+            return FALSE;
         }
     }
     
@@ -139,22 +115,12 @@ boolean process_data_directive(char *line, int *index, int *DC, char *directive)
 /*
  * Function: process_instruction
  * -----------------------------
- * Parses a standard assembly instruction (e.g., add, mov, jmp, hlt), encodes its 
- * primary machine code word, and handles instruction processing during Pass 1.
- * 
- * @param line: The full string of the current line.
- * @param index: Pointer to the current index in the line (pointing to the operation name).
- * @param IC: Pointer to the Instruction Counter.
- * @param operation: The name of the operation (e.g., "add", "hlt").
- * @return: TRUE if the instruction was successfully processed, FALSE otherwise.
  */
-boolean process_instruction(char *line, int *index, int *IC, char *operation) {
+boolean process_instruction(char *line, int *index, int *IC, char *operation, InstructionNode **inst_head) {
     unsigned long first_word = 0;
     
-    /* 1. Skip any white spaces after the operation name */
     skip_white_spaces(line, index);
 
-    /* 2. Handle instructions with no operands (e.g., hlt, rts) */
     if (strcmp(operation, "hlt") == 0) {
         first_word = (63UL << 26);
     } 
@@ -162,7 +128,6 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation) {
         first_word = (62UL << 26);
     }
     else {
-        /* 3. Handle R-type, J-type, and other instruction formats */
         if (strcmp(operation, "add") == 0 || strcmp(operation, "sub") == 0 ||
             strcmp(operation, "and") == 0 || strcmp(operation, "or") == 0 ||
             strcmp(operation, "nor") == 0) {
@@ -184,28 +149,19 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation) {
         }
     }
 
-    /* 4. Add the encoded instruction word to the code image */
-    add_to_code_image(first_word, IC);
-
+    add_to_code_image(first_word, IC, inst_head);
     return TRUE;
 }
 
 /* 
  * Function: add_to_data_image
  * ---------------------------
- * Inserts a parsed numeric value or character into the data image array.
  */
-/* 
- * Function: add_to_data_image
- * ---------------------------
- * Inserts a parsed numeric value or character into the data image linked list.
- */
-void add_to_data_image(long value, int size_in_bytes, int *DC) {
+void add_to_data_image(long value, int size_in_bytes, int *DC, DataNode **data_head) {
     int i;
     for (i = 0; i < size_in_bytes; i++) {
         unsigned char byte_val = (value >> (i * 8)) & 0xFF;
-        /* Call your function that adds a byte to the data linked list */
-        add_byte_to_data_list(byte_val, *DC); 
+        add_data_byte(data_head, byte_val, *DC); 
         (*DC)++; 
     }
 }
@@ -213,10 +169,10 @@ void add_to_data_image(long value, int size_in_bytes, int *DC) {
 /* 
  * Function: add_to_code_image
  * ---------------------------
- * Inserts an encoded machine code instruction word into the instruction linked list.
  */
-void add_to_code_image(unsigned long machine_code, int *IC) {
-    /* Call your function that adds an instruction node to the instruction linked list */
-    add_instruction_to_list(machine_code, *IC);
-    *IC += 4; /* Advance IC by 4 bytes per instruction */
+void add_to_code_image(unsigned long machine_code, int *IC, InstructionNode **inst_head) {
+    InstructionWord word;
+    word.machine_code = machine_code;
+    add_instruction(inst_head, word, *IC);
+    *IC += 4;
 }
