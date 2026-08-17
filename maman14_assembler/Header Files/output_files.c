@@ -4,6 +4,7 @@
 #include "image.h"
 #include "symbol_table.h"
 #include "output_files.h"
+#include "globals.h"
 
 /* 
  * ---------------------------------------------------------
@@ -26,7 +27,7 @@ void create_ob_file(const char *filename, InstructionNode *inst_head, DataNode *
     }
     
     /* Print Header: Instruction image size and Data image size */
-    fprintf(file, "\t%d %d\n", icf - 100, dcf);
+    fprintf(file, "\t%d %d\n", icf - IC_INIT_VALUE, dcf);
     
     /* 1. Print Instruction Image */
     while (inst_curr != NULL) {
@@ -34,10 +35,10 @@ void create_ob_file(const char *filename, InstructionNode *inst_head, DataNode *
         
         fprintf(file, "%04d %02X %02X %02X %02X\n", 
                 inst_curr->address,
-                (val >> 24) & 0xFF,
-                (val >> 16) & 0xFF,
-                (val >> 8) & 0xFF,
-                val & 0xFF);
+                val & 0xFF,               /* Bits 0-7 */
+                (val >> 8) & 0xFF,        /* Bits 8-15 */
+                (val >> 16) & 0xFF,       /* Bits 16-23 */
+                (val >> 24) & 0xFF);      /* Bits 24-31 */
                 
         inst_curr = inst_curr->next;
     }
@@ -48,7 +49,7 @@ void create_ob_file(const char *filename, InstructionNode *inst_head, DataNode *
             if (data_byte_count > 0) {
                 fprintf(file, "\n"); 
             }
-            fprintf(file, "%04d", data_curr->address);
+            fprintf(file, "%04d", data_curr->address+icf);
         }
         
         fprintf(file, " %02X", data_curr->byte & 0xFF);

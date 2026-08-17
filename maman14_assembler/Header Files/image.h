@@ -17,39 +17,6 @@
  * ---------------------------------------------------------
  */
 
-/* 
- * Structure for R-Type Instructions.
- * Total: 32 bits.
- */
-typedef struct {
-    unsigned int unused : 6; /* Bits 0-5:   Unused (always 0) */
-    unsigned int funct  : 5; /* Bits 6-10:  Function code */
-    unsigned int rd     : 5; /* Bits 11-15: Destination register */
-    unsigned int rt     : 5; /* Bits 16-20: Source register 2 */
-    unsigned int rs     : 5; /* Bits 21-25: Source register 1 */
-    unsigned int opcode : 6; /* Bits 26-31: Operation code */
-} R_Instruction;
-
-/* 
- * Structure for I-Type Instructions.
- * Total: 32 bits.
- */
-typedef struct {
-    int immed           : 16; /* Bits 0-15:  Immediate value (signed) */
-    unsigned int rt     : 5;  /* Bits 16-20: Target/Source register */
-    unsigned int rs     : 5;  /* Bits 21-25: Source register 1 */
-    unsigned int opcode : 6;  /* Bits 26-31: Operation code */
-} I_Instruction;
-
-/* 
- * Structure for J-Type Instructions.
- * Total: 32 bits.
- */
-typedef struct {
-    unsigned int address : 25; /* Bits 0-24:  Target memory address */
-    unsigned int reg     : 1;  /* Bit 25:     Register bit flag (0 or 1) */
-    unsigned int opcode  : 6;  /* Bits 26-31: Operation code */
-} J_Instruction;
 
 /* 
  * Union representing a general 32-bit instruction word.
@@ -57,10 +24,7 @@ typedef struct {
  * depending on the instruction type (R, I, or J).
  */
 typedef union {
-    R_Instruction r_inst;
-    I_Instruction i_inst;
-    J_Instruction j_inst;
-    unsigned long machine_code; /* Useful for printing the final 32-bit code to the .ob file */
+    unsigned long machine_code;
 } InstructionWord;
 
 /* 

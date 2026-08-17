@@ -22,6 +22,7 @@ typedef struct macro_node {
  * and creates the clean .am file.
  * Returns TRUE if the process succeeded without errors, FALSE otherwise.
  */
-boolean process_macros(char *base_filename);
+boolean process_macros(char *base_filename, MacroNode **out_macro_head);
+void free_macro_table(MacroNode *head);
 
 #endif /* MACRO_H */

@@ -4,6 +4,7 @@
 #include "globals.h"
 #include "symbol_table.h"
 #include "image.h"
+#include "macro.h"
 /*
  * Performs the first pass of the assembler on the given assembly file (.am).
  * Builds the symbol table, processes data and instruction lines, 
@@ -12,6 +13,6 @@
  * @param symbol_table A pointer to the head of the symbol table.
  * @return TRUE (1) if the first pass completed successfully without errors, FALSE (0) otherwise.
  */
-boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode **inst_head, DataNode **data_head, int *ICF, int *DCF);
+boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode **inst_head, DataNode **data_head, int *ICF, int *DCF,MacroNode *macro_table);
 
 #endif /* PASS1_H */

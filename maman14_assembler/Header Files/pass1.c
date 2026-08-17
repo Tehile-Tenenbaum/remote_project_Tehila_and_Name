@@ -6,6 +6,7 @@
 #include "pass1.h"
 #include "parser.h"
 #include "utils.h"
+#include "macro.h"
 #define IC_INIT_VALUE 100
 #define DC_INIT_VALUE 0
 
@@ -20,7 +21,7 @@
  * @param DCF: Pointer to store the final Data Counter.
  * @return: TRUE if no errors were found, FALSE otherwise.
  */
-boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode **inst_head, DataNode **data_head, int *ICF, int *DCF) {
+boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode **inst_head, DataNode **data_head, int *ICF, int *DCF, MacroNode *macro_table) {
     FILE *file;
     char line[MAX_LINE_LENGTH];
     char file_with_extension[MAX_LINE_LENGTH];
@@ -49,7 +50,18 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
         boolean has_label = FALSE;
         
         line_number++;
+          /* בדיקת אורך השורה: אם אין ירידת שורה ולא הגענו לסוף הקובץ, השורה ארוכה מדי */
+        if (strchr(line, '\n') == NULL && !feof(file)) {
+            int c;
+            printf("Error at line %d: Line exceeds maximum length of 80 characters.\n", line_number);
+            error_found = TRUE;
+            
+            /* ניקוי החוצץ (Buffer) עד סוף השורה כדי למנוע גלישה לאיטרציה הבאה */
         
+            while ((c = fgetc(file)) != '\n' && c != EOF);
+            
+            continue; /* מדלגים על עיבוד השורה השגויה ועוברים לשורה הבאה */
+        }
         /* Step 3: Skip comments and empty lines */
         skip_white_spaces(line, &index);
         if (line[index] == ';' || line[index] == '\n' || line[index] == '\r' || line[index] == '\0') {
@@ -68,7 +80,13 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
                     printf("Error at line %d: Invalid label name '%s'\n", line_number, label_name);
                     error_found = TRUE;
                 }
-                
+                if (!is_valid_label_name(label_name)) {
+                    printf("Error at line %d: Invalid label name '%s'\n", line_number, label_name);
+                    error_found = TRUE;
+                } else if (is_macro_name(label_name, macro_table)) {
+                    printf("Error at line %d: Label '%s' is already used as a macro name\n", line_number, label_name);
+                    error_found = TRUE;
+                }
                 /* Advance index past the label */
                 while (line[index] != ':' && line[index] != '\0') index++;
                 index++; /* skip the colon */
@@ -143,9 +161,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
        if (!process_instruction(line, &index, &IC, current_word, inst_head)) {
             printf("Error at line %d: Invalid instruction syntax\n", line_number);
             error_found = TRUE;
-        } else {
-            IC += 4; /* Every instruction takes exactly 32 bits (4 bytes) */
-        }
+        } 
     }
 
     fclose(file);

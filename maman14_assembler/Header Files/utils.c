@@ -9,21 +9,29 @@
  */
 boolean is_reserved_word(char *word) {
     int i;
-    /* Array of all reserved words according to the course syllabus */
     char *reserved_words[] = {
-        "mov", "cmp", "add", "sub", "not", "clr", "lea", 
-        "inc", "dec", "jmp", "bne", "red", "prn", "jsr", 
-        "rts", "stop", ".data", ".string", ".entry", ".extern",
+        /* פעולות מסוג R */
+        "add", "sub", "and", "or", "nor",
+        "move", "mvhi", "mvlo",
+        /* פעולות מסוג I */
+        "addi", "subi", "andi", "ori", "nori",
+        "beq", "bne", "blt", "bgt",
+        "lb", "sb", "lw", "sw", "lh", "sh",
+        /* פעולות מסוג J */
+        "jmp", "la", "call", "hlt",
+        /* הנחיות */
+        ".db", ".dw", ".dh", ".asciz", ".entry", ".extern",
+        /* מאקרו */
         "mcro", "mcroend"
     };
     int num_reserved = sizeof(reserved_words) / sizeof(reserved_words[0]);
 
     for (i = 0; i < num_reserved; i++) {
         if (strcmp(word, reserved_words[i]) == 0) {
-            return TRUE; /* Match found - it is a reserved word */
+            return TRUE;
         }
     }
-    return FALSE; /* Safe to use */
+    return FALSE;
 }
 /*
  * Advances the index to skip any spaces or tabs.
@@ -63,7 +71,7 @@ boolean is_valid_label_name(char *name) {
     int i;
 
     /* 1. אורך מקסימלי (31 תווים) ומניעת מחרוזת ריקה */
-    if (name == NULL || strlen(name) == 0 || strlen(name) > MAX_LABEL_LENGTH) {
+    if (name == NULL || strlen(name) == 0 || strlen(name) >= MAX_LABEL_LENGTH) {
         return FALSE;
     }
 
@@ -77,6 +85,9 @@ boolean is_valid_label_name(char *name) {
         if (!isalnum(name[i])) {
             return FALSE;
         }
+    }
+    if (is_reserved_word(name)) {
+        return FALSE;
     }
 
     /* אם הגענו לפה, השם תקין תחבירית */

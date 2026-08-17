@@ -7,7 +7,7 @@
 #include "symbol_table.h"
 #include "globals.h"
 #include "parser.h"
-
+#include "output_files.h"
 int find_symbol_address(SymbolNode *head, const char *name, int *address);
 
 /*
@@ -20,13 +20,12 @@ int find_symbol_address(SymbolNode *head, const char *name, int *address);
  */
 int execute_pass2(const char *filename, SymbolNode *sym_head, InstructionNode *inst_head, ExternNode **ext_head) {
     FILE *file;
-    char line[256];
-    char first_word[64];
-    char second_word[64];
-    char operand[64];
+    char line[MAX_LINE_LENGTH];
+    char first_word[MAX_LABEL_LENGTH];
+    char second_word[MAX_LABEL_LENGTH];
+    char operand[MAX_LABEL_LENGTH];
     int line_number = 0;
     int error_flag = 0; /* 0 means success, 1 means errors found */
-    int found_address;
     
     InstructionNode *current_inst = inst_head; 
 
@@ -112,15 +111,35 @@ int execute_pass2(const char *filename, SymbolNode *sym_head, InstructionNode *i
          * Check if this specific instruction requires us to fill in a missing label address.
          * Instructions that use labels are J-type (jmp, la, call) and I-type branches (beq, bne, blt, etc.)
          */
-        if (strcmp(operation_word, "jmp") == 0 || strcmp(operation_word, "la") == 0 || strcmp(operation_word, "call") == 0) {
+      if (strcmp(operation_word, "jmp") == 0 || strcmp(operation_word, "la") == 0 || strcmp(operation_word, "call") == 0 ||
+            strcmp(operation_word, "beq") == 0 || strcmp(operation_word, "bne") == 0 || strcmp(operation_word, "blt") == 0 || strcmp(operation_word, "bgt") == 0) {
             
-            /* Extract the label operand (assuming it's the next string after the operation) */
+            /* Extract the label operand */
             if (sscanf(line_remainder, "%*s %s", operand) == 1) {
                 
-                /* Search for the label in the symbol table */
-                if (find_symbol_address(sym_head, operand, &found_address)) {
-                    /* Fill the "hole" (the 0 we left in Pass 1) with the correct address */
-                    current_inst->word.j_inst.address = found_address; 
+                /* Search for the FULL symbol node to get its address AND type */
+                SymbolNode *target_sym = find_symbol(sym_head, operand);
+                
+                if (target_sym != NULL) {
+                    
+                    /* Fill the "hole" left in Pass 1 with safe bitwise operations */
+                    
+                    /* For J-type instructions (jmp, la, call), insert the absolute address */
+                    if (strcmp(operation_word, "jmp") == 0 || strcmp(operation_word, "la") == 0 || strcmp(operation_word, "call") == 0) {
+                        current_inst->word.machine_code |= (target_sym->address & 0x1FFFFFF);
+                    } 
+                    /* For I-type branch instructions, insert the relative distance */
+                    else {
+                        long distance = target_sym->address - current_inst->address;
+                        current_inst->word.machine_code |= (distance & 0xFFFF);
+                    }
+
+                    /* --- EXTERNAL USAGE LOGIC --- */
+                    /* If the symbol used is external, we must add it to the .ext file list */
+                    if (target_sym->type == SYMBOL_TYPE_EXTERNAL) {
+                        add_extern_usage(ext_head, operand, current_inst->address);
+                    }
+                    
                 } else {
                     fprintf(stderr, "Error in file %s (Line %d): Undefined symbol '%s' used as operand.\n", 
                             filename, line_number, operand);

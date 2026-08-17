@@ -14,14 +14,14 @@ static boolean add_line_to_macro(MacroNode *macro, char *line);
 /* Searches for a macro by name in the table. Returns a pointer to it, or NULL if not found. */
 static MacroNode* find_macro(MacroNode *head, char *name);
 /* Frees all dynamically allocated memory in the macro table to prevent leaks. */
-static void free_macro_table(MacroNode *head);
+void free_macro_table(MacroNode *head);
 
 
 /* 
  * Main Macro Processing Function
 */
 
-boolean process_macros(char *base_filename) {
+boolean process_macros(char *base_filename, MacroNode **out_macro_head) {
     FILE *file_as;
     FILE *file_am;
     char filename_as[MAX_LINE_LENGTH];
@@ -149,7 +149,7 @@ boolean process_macros(char *base_filename) {
      * We intentionally DO NOT call free_macro_table(macro_head) here, 
      * because the macro table must stay in memory for Pass 1 to check for label conflicts. 
      */
-
+*out_macro_head = macro_head;
     return TRUE;
   }
 
@@ -265,7 +265,7 @@ static MacroNode* find_macro(MacroNode *head, char *name) {
     return NULL; /* Macro not found */
 }
 
-static void free_macro_table(MacroNode *head) {
+void free_macro_table(MacroNode *head) {
     MacroNode *current_macro = head;
     MacroNode *next_macro;
     MacroLine *current_line;
