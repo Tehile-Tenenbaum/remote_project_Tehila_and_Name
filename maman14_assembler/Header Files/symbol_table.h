@@ -19,7 +19,7 @@ typedef struct symbol_node {
  * Adds a new symbol to the symbol table.
  * Returns TRUE on success, or FALSE if allocation failed or symbol already exists.
  */
-boolean add_symbol(SymbolNode **head, char *name, int address, int type);
+boolean add_symbol(SymbolNode **head, char *name, int address, int type,int line_number);
 /*
  * Searches for a symbol by name in the symbol table.
  * Returns a pointer to the symbol node, or NULL if not found.

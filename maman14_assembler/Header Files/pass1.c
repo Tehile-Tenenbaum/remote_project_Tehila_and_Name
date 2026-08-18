@@ -108,7 +108,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
                     printf("Error at line %d: Label '%s' already defined\n", line_number, label_name);
                     error_found = TRUE;
                 } else {
-                    add_symbol(symbol_table, label_name, DC, SYMBOL_TYPE_DATA);
+                    add_symbol(symbol_table, label_name, DC, SYMBOL_TYPE_DATA,line_number);
                 }
             }
             /* Step 8: Identify data type, encode to data image, update DC */
@@ -138,7 +138,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
                          printf("Error at line %d: Invalid extern label\n", line_number);
                          error_found = TRUE;
                     } else {
-                         add_symbol(symbol_table, ext_label, 0, SYMBOL_TYPE_EXTERNAL);
+                         add_symbol(symbol_table, ext_label, 0, SYMBOL_TYPE_EXTERNAL,line_number);
                     }
                 }
             }
@@ -152,7 +152,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
                 printf("Error at line %d: Label '%s' already defined\n", line_number, label_name);
                 error_found = TRUE;
             } else {
-                add_symbol(symbol_table, label_name, IC, SYMBOL_TYPE_CODE);
+                add_symbol(symbol_table, label_name, IC, SYMBOL_TYPE_CODE,line_number);
             }
         }
         

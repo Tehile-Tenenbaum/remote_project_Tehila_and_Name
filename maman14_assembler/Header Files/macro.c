@@ -8,7 +8,7 @@
  * Forward Declarations of Static Helper Functions
 */
 /* Saves a new macro to the macro table. Returns TRUE on success, FALSE on error. */
-static boolean save_new_macro(MacroNode **head, char *line, MacroNode **current_macro);
+static boolean save_new_macro(MacroNode **head, char *line, MacroNode **current_macro,int line_number);
 /* Adds a line of code to the currently active macro. Returns TRUE on success. */
 static boolean add_line_to_macro(MacroNode *macro, char *line);
 /* Searches for a macro by name in the table. Returns a pointer to it, or NULL if not found. */
@@ -31,7 +31,7 @@ boolean process_macros(char *base_filename, MacroNode **out_macro_head) {
     char dummy[MAX_LINE_LENGTH];
     boolean error_found = FALSE;
     boolean inside_macro = FALSE;
-    
+    int line_number = 0;
     MacroNode *macro_head = NULL;    /* Head of the macro table linked list */
     MacroNode *current_macro = NULL; /* Pointer to the macro currently being defined */
     MacroNode *found_macro = NULL;   /* Pointer used when a macro call is found */
@@ -58,7 +58,7 @@ boolean process_macros(char *base_filename, MacroNode **out_macro_head) {
 
     /* Read the file line by line */
     while (fgets(line, MAX_LINE_LENGTH, file_as) != NULL) {
-        
+        line_number++;
         /* Extract the first word of the line safely (ignores leading whitespaces) */
         if (sscanf(line, "%s", first_word) != 1) {
             /* Empty line or just whitespaces - write as is if not inside macro */
@@ -73,12 +73,12 @@ boolean process_macros(char *base_filename, MacroNode **out_macro_head) {
         /* Case 1: Start of a new macro definition */
         if (strcmp(first_word, "mcro") == 0) {
             if (inside_macro) {
-                printf("Error: Nested macros are not allowed.\n");
+               printf("Error at line %d: Nested macros are not allowed.\n", line_number);
                 error_found = TRUE;
                 continue;
             }
             
-            if (save_new_macro(&macro_head, line, &current_macro) == FALSE) {
+            if (save_new_macro(&macro_head, line, &current_macro,line_number) == FALSE) {
                 error_found = TRUE;
             }
             inside_macro = TRUE;
@@ -88,7 +88,7 @@ boolean process_macros(char *base_filename, MacroNode **out_macro_head) {
         /* Case 2: End of a macro definition */
         if (strcmp(first_word, "mcroend") == 0) {
             if (!inside_macro) {
-                printf("Error: 'mcroend' encountered without a preceding 'mcro'.\n");
+                printf("Error at line %d: 'mcroend' encountered without a preceding 'mcro'.\n", line_number);
                 error_found = TRUE;
                 continue;
             }
@@ -97,7 +97,7 @@ boolean process_macros(char *base_filename, MacroNode **out_macro_head) {
             /* Using a dummy variables to check if a second word exists */
 
             if (sscanf(line, "%*s %s", dummy) == 1) {
-                printf("Error: Extraneous text after 'mcroend'.\n");
+               printf("Error at line %d: Extraneous text after 'mcroend'.\n", line_number);
                 error_found = TRUE;
             }
             
@@ -156,8 +156,7 @@ boolean process_macros(char *base_filename, MacroNode **out_macro_head) {
 /* 
  * Helper Functions Implementation
  */
-
-static boolean save_new_macro(MacroNode **head, char *line, MacroNode **current_macro) {
+static boolean save_new_macro(MacroNode **head, char *line, MacroNode **current_macro, int line_number) {
     char keyword[MAX_LINE_LENGTH];
     char macro_name[MAX_LINE_LENGTH];
     char garbage[MAX_LINE_LENGTH];
@@ -170,17 +169,17 @@ static boolean save_new_macro(MacroNode **head, char *line, MacroNode **current_
     parsed_items = sscanf(line, "%s %s %s", keyword, macro_name, garbage);
 
     if (parsed_items < 2) {
-        printf("Error: Missing macro name in definition.\n");
+        printf("Error at line %d: Missing macro name in definition.\n", line_number);
         return FALSE;
     }
     if (parsed_items == 3) {
-        printf("Error: Extraneous text after macro name '%s'.\n", macro_name);
+        printf("Error at line %d: Extraneous text after macro name '%s'.\n", line_number, macro_name);
         return FALSE;
     }
 
     /* Validation: Check if the macro name is a reserved assembly word */
     if (is_reserved_word(macro_name) == TRUE) {
-        printf("Error: Macro name '%s' is a reserved word.\n", macro_name);
+        printf("Error at line %d: Macro name '%s' is a reserved word.\n", line_number, macro_name);
         return FALSE;
     }
 
@@ -188,7 +187,7 @@ static boolean save_new_macro(MacroNode **head, char *line, MacroNode **current_
     current = *head;
     while (current != NULL) {
         if (strcmp(current->name, macro_name) == 0) {
-            printf("Error: Macro '%s' is already defined.\n", macro_name);
+            printf("Error at line %d: Macro '%s' is already defined.\n", line_number, macro_name);
             return FALSE;
         }
         current = current->next;
@@ -197,7 +196,7 @@ static boolean save_new_macro(MacroNode **head, char *line, MacroNode **current_
     /* Allocate memory for the new macro node */
     new_node = (MacroNode *)malloc(sizeof(MacroNode));
     if (new_node == NULL) {
-        printf("Error: Memory allocation failed for macro '%s'!\n", macro_name);
+        printf("Error at line %d: Memory allocation failed for macro '%s'!\n", line_number, macro_name);
         return FALSE;
     }
 

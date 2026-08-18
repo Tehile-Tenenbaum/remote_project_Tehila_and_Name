@@ -29,19 +29,19 @@ SymbolNode* find_symbol(SymbolNode *head, char *name) {
  * Validates symbol length and checks for duplicates.
  * Returns TRUE on success, or FALSE if validation or allocation failed.
  */
-boolean add_symbol(SymbolNode **head, char *name, int address, int type) {
+boolean add_symbol(SymbolNode **head, char *name, int address, int type,int line_number) {
     SymbolNode *new_node;
 
     /* 1. Validation: Check if the symbol name exceeds the maximum allowed length (31 characters) */
     if (strlen(name) > MAX_LABEL_LENGTH) {
-        printf("Error: Symbol name '%s' exceeds the maximum allowed length of 31 characters.\n", name);
+printf("Error at line %d: Symbol name '%s' exceeds the maximum allowed length of 31 characters.\n", line_number, name);
         return FALSE;
     }
 
     /* 2. Duplicate check: Verify if the symbol already exists in the table */
     if (find_symbol(*head, name) != NULL) {
         /* Print an error message regarding the duplicate symbol */
-        printf("Error: Symbol '%s' is already defined.\n", name);
+ printf("Error at line %d: Symbol '%s' is already defined.\n", line_number, name);
         return FALSE; 
     }
 
