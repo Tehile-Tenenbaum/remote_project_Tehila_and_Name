@@ -8,7 +8,7 @@
 #define MAX_CODE_SIZE 1000
 #define IC_INIT_VALUE 100
 
-/* הצהרה גלובלית על מערכי הזיכרון */
+/* הצהרה גלובלית על מערכי הזיכרון hh */
 extern char data_image[MAX_DATA_SIZE];
 extern unsigned long code_image[MAX_CODE_SIZE];
 

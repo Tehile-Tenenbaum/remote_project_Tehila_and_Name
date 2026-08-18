@@ -13,7 +13,7 @@
  */
 void create_ob_file(const char *filename, InstructionNode *inst_head, DataNode *data_head, int icf, int dcf) {
     FILE *file;
-    char ob_filename[256];
+    char ob_filename[MAX_LABEL_LENGTH];
     InstructionNode *inst_curr = inst_head;
     DataNode *data_curr = data_head;
     int data_byte_count = 0;
