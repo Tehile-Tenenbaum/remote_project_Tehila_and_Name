@@ -65,8 +65,8 @@
 
 boolean process_data_directive(char *line, int *index, int *DC, char *directive, DataNode **data_head);
 int split_operands(char *line, int *index, char tokens[3][32]);
- boolean parse_register(char *token, int *reg_num);
-boolean process_instruction(char *line, int *index, int *IC, char *operation, InstructionNode **inst_head);
+ boolean parse_register(char *token, int *reg_num, int line_number, char *filename);
+boolean process_instruction(char *line, int *index, int *IC, char *operation, InstructionNode **inst_head, int line_number, char *filename);
 void add_to_data_image(long value, int size_in_bytes, int *DC, DataNode **data_head);
 void add_to_code_image(unsigned long machine_code, int *IC, InstructionNode **inst_head);
 boolean is_data_directive(char *word);

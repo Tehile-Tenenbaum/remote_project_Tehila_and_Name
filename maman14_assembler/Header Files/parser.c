@@ -89,12 +89,25 @@ boolean is_entry_directive(char *word) {
  * בודקת שהטוקן הוא רגיסטר תקין בצורה $0 עד $31 (ללא תווים מיותרים
  * אחרי המספר), ומחזירה את מספר הרגיסטר דרך reg_num.
  */
- boolean parse_register(char *token, int *reg_num) {
+boolean parse_register(char *token, int *reg_num, int line_number, char *filename) {
     int num, chars_read;
-    if (token[0] != '$') return FALSE;
-    if (sscanf(token + 1, "%d%n", &num, &chars_read) != 1) return FALSE;
-    if (token[1 + chars_read] != '\0') return FALSE;
-    if (num < 0 || num > MAX_REGISTER) return FALSE;
+    
+    if (token[0] != '$') {
+        printf("Error in %s at line %d: Invalid operand, expected register\n", filename, line_number);
+        return FALSE;
+    }
+    
+    if (sscanf(token + 1, "%d%n", &num, &chars_read) != 1 || token[1 + chars_read] != '\0') {
+        printf("Error in %s at line %d: Unknown register name\n", filename, line_number);
+        return FALSE;
+    }
+    
+    /* הבדיקה שלנו: אם מספר הרגיסטר גדול מ-31 או קטן מ-0 */
+    if (num < 0 || num > MAX_REGISTER) {
+        printf("Error in %s at line %d: Unknown register name\n", filename, line_number);
+        return FALSE;
+    }
+    
     *reg_num = num;
     return TRUE;
 }
@@ -108,7 +121,7 @@ boolean is_entry_directive(char *word) {
  * הם יושלמו ב-Pass 2, לאחר שכל הכתובות ידועות.
  */
 
-boolean process_instruction(char *line, int *index, int *IC, char *operation, InstructionNode **inst_head) {
+boolean process_instruction(char *line, int *index, int *IC, char *operation, InstructionNode **inst_head, int line_number, char *filename) {
     unsigned long first_word = 0;
     char tokens[MAX_OPERANDS][MAX_LABEL_LENGTH];
     int num_tokens;
@@ -116,12 +129,17 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
     skip_white_spaces(line, index);
     num_tokens = split_operands(line, index, tokens);
 
+    /* בדיקת זבל או פסיקים מיותרים בסוף */
     if (!check_no_garbage(line, *index)) {
+        printf("Error in %s at line %d: Extraneous text or illegal comma after end of command\n", filename, line_number);
         return FALSE;
     }
 
     if (strcmp(operation, "hlt") == 0) {
-        if (num_tokens != 0) return FALSE;
+        if (num_tokens != 0) {
+            printf("Error in %s at line %d: Extraneous text after end of command\n", filename, line_number);
+            return FALSE;
+        }
         first_word = (OPCODE_HLT << OPCODE_SHIFT);
     }
     else if (strcmp(operation, "add") == 0 || strcmp(operation, "sub") == 0 ||
@@ -134,10 +152,13 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
         else if (strcmp(operation, "or") == 0) funct = FUNCT_OR;
         else if (strcmp(operation, "nor") == 0) funct = FUNCT_NOR;
 
-        if (num_tokens != MAX_OPERANDS) return FALSE;
-        if (!parse_register(tokens[0], &rs)) return FALSE;
-        if (!parse_register(tokens[1], &rt)) return FALSE;
-        if (!parse_register(tokens[2], &rd)) return FALSE;
+        if (num_tokens != MAX_OPERANDS) {
+            printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+            return FALSE;
+        }
+        if (!parse_register(tokens[0], &rs, line_number, filename)) return FALSE;
+        if (!parse_register(tokens[1], &rt, line_number, filename)) return FALSE;
+        if (!parse_register(tokens[2], &rd, line_number, filename)) return FALSE;
 
         first_word = (OPCODE_R_ARITH << OPCODE_SHIFT) | ((unsigned long)rs << RS_SHIFT) |
                      ((unsigned long)rt << RT_SHIFT) | ((unsigned long)rd << RD_SHIFT) | (funct << FUNCT_SHIFT);
@@ -149,9 +170,12 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
         if (strcmp(operation, "mvhi") == 0) funct = FUNCT_MVHI;
         else if (strcmp(operation, "mvlo") == 0) funct = FUNCT_MVLO;
 
-        if (num_tokens != 2) return FALSE;
-        if (!parse_register(tokens[0], &dest)) return FALSE;
-        if (!parse_register(tokens[1], &src)) return FALSE;
+        if (num_tokens != 2) {
+             printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+             return FALSE;
+        }
+        if (!parse_register(tokens[0], &dest, line_number, filename)) return FALSE;
+        if (!parse_register(tokens[1], &src, line_number, filename)) return FALSE;
 
         first_word = (OPCODE_R_MOVE << OPCODE_SHIFT) | ((unsigned long)dest << RS_SHIFT) |
                      ((unsigned long)src << RD_SHIFT) | (funct << FUNCT_SHIFT);
@@ -166,11 +190,20 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
         else if (strcmp(operation, "ori") == 0) opcode = OPCODE_ORI;
         else if (strcmp(operation, "nori") == 0) opcode = OPCODE_NORI;
 
-        if (num_tokens != MAX_OPERANDS) return FALSE;
-        if (!parse_register(tokens[0], &rs)) return FALSE;
-        if (sscanf(tokens[1], "%d", &immed) != 1) return FALSE;
-        if (immed < MIN_IMMED || immed > MAX_IMMED) return FALSE;
-        if (!parse_register(tokens[2], &rt)) return FALSE;
+        if (num_tokens != MAX_OPERANDS) {
+            printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+            return FALSE;
+        }
+        if (!parse_register(tokens[0], &rs, line_number, filename)) return FALSE;
+        if (sscanf(tokens[1], "%d", &immed) != 1) {
+            printf("Error in %s at line %d: Invalid immediate operand\n", filename, line_number);
+            return FALSE;
+        }
+        if (immed < MIN_IMMED || immed > MAX_IMMED) {
+            printf("Error in %s at line %d: Immediate value out of range\n", filename, line_number);
+            return FALSE;
+        }
+        if (!parse_register(tokens[2], &rt, line_number, filename)) return FALSE;
 
         first_word = (opcode << OPCODE_SHIFT) | ((unsigned long)rs << RS_SHIFT) |
                      ((unsigned long)rt << RT_SHIFT) | ((unsigned long)immed & 0xFFFFUL);
@@ -183,9 +216,12 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
         else if (strcmp(operation, "blt") == 0) opcode = OPCODE_BLT;
         else if (strcmp(operation, "bgt") == 0) opcode = OPCODE_BGT;
 
-        if (num_tokens != MAX_OPERANDS) return FALSE;
-        if (!parse_register(tokens[0], &rs)) return FALSE;
-        if (!parse_register(tokens[1], &rt)) return FALSE;
+        if (num_tokens != MAX_OPERANDS) {
+            printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+            return FALSE;
+        }
+        if (!parse_register(tokens[0], &rs, line_number, filename)) return FALSE;
+        if (!parse_register(tokens[1], &rt, line_number, filename)) return FALSE;
 
         first_word = (opcode << OPCODE_SHIFT) | ((unsigned long)rs << RS_SHIFT) | ((unsigned long)rt << RT_SHIFT);
     }
@@ -199,37 +235,56 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
         else if (strcmp(operation, "lw") == 0) opcode = OPCODE_LW;
         else if (strcmp(operation, "sw") == 0) opcode = OPCODE_SW;
         else if (strcmp(operation, "lh") == 0) opcode = OPCODE_LH;
-        else opcode = OPCODE_SH; 
+        else opcode = OPCODE_SH;
 
-        if (num_tokens != MAX_OPERANDS) return FALSE;
-        if (!parse_register(tokens[0], &rs)) return FALSE;
-        if (sscanf(tokens[1], "%d", &immed) != 1) return FALSE;
-        if (immed < MIN_IMMED || immed > MAX_IMMED) return FALSE;
-        if (!parse_register(tokens[2], &rt)) return FALSE;
+        if (num_tokens != MAX_OPERANDS) {
+            printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+            return FALSE;
+        }
+        if (!parse_register(tokens[0], &rs, line_number, filename)) return FALSE;
+        if (sscanf(tokens[1], "%d", &immed) != 1) {
+            printf("Error in %s at line %d: Invalid immediate operand\n", filename, line_number);
+            return FALSE;
+        }
+        if (immed < MIN_IMMED || immed > MAX_IMMED) {
+             printf("Error in %s at line %d: Immediate value out of range\n", filename, line_number);
+             return FALSE;
+        }
+        if (!parse_register(tokens[2], &rt, line_number, filename)) return FALSE;
 
         first_word = (opcode << OPCODE_SHIFT) | ((unsigned long)rs << RS_SHIFT) |
                      ((unsigned long)rt << RT_SHIFT) | ((unsigned long)immed & 0xFFFFUL);
     }
     else if (strcmp(operation, "jmp") == 0) {
-        if (num_tokens != 1) return FALSE;
+        if (num_tokens != 1) {
+            printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+            return FALSE;
+        }
         if (tokens[0][0] == '$') {
             int reg;
-            if (!parse_register(tokens[0], &reg)) return FALSE;
+            if (!parse_register(tokens[0], &reg, line_number, filename)) return FALSE;
             first_word = (OPCODE_JMP << OPCODE_SHIFT) | (1UL << J_REG_SHIFT) | (unsigned long)reg;
         } else {
-            first_word = (OPCODE_JMP << OPCODE_SHIFT); 
+            first_word = (OPCODE_JMP << OPCODE_SHIFT);
         }
     }
     else if (strcmp(operation, "la") == 0) {
-        if (num_tokens != 1 || tokens[0][0] == '$') return FALSE;
-        first_word = (OPCODE_LA << OPCODE_SHIFT); 
+        if (num_tokens != 1 || tokens[0][0] == '$') {
+             printf("Error in %s at line %d: Invalid operand for 'la' instruction\n", filename, line_number);
+             return FALSE;
+        }
+        first_word = (OPCODE_LA << OPCODE_SHIFT);
     }
     else if (strcmp(operation, "call") == 0) {
-        if (num_tokens != 1 || tokens[0][0] == '$') return FALSE;
-        first_word = (OPCODE_CALL << OPCODE_SHIFT); 
+        if (num_tokens != 1 || tokens[0][0] == '$') {
+             printf("Error in %s at line %d: Invalid operand for 'call' instruction\n", filename, line_number);
+             return FALSE;
+        }
+        first_word = (OPCODE_CALL << OPCODE_SHIFT);
     }
     else {
-        return FALSE; 
+        printf("Error in %s at line %d: Unknown opcode\n", filename, line_number);
+        return FALSE;
     }
 
     add_to_code_image(first_word, IC, inst_head);

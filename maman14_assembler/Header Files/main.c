@@ -31,6 +31,7 @@ int main(int argc, char *argv[]) {
         char *filename = argv[i];
         int ICF = 0;
         int DCF = 0;
+     
         /* Data structures for the current file */
         SymbolNode *symbol_table = NULL;
         InstructionNode *instruction_image = NULL;
@@ -49,7 +50,7 @@ int main(int argc, char *argv[]) {
             printf("Errors found in pre-assembler. Skipping file '%s'.\n", filename);
             continue; /* Move to the next file */
         }
-
+     
         /* Step 2: Pass 1 */
         /* Reads filename.am, builds symbol table, and partially builds images */
  if (!execute_pass1(filename, &symbol_table, &instruction_image, &data_image, &ICF, &DCF,macro_table)) {

@@ -28,7 +28,7 @@ int execute_pass2(const char *filename, SymbolNode *sym_head, InstructionNode *i
     int error_flag = 0; /* 0 means success, 1 means errors found */
     
     InstructionNode *current_inst = inst_head; 
-
+     SymbolNode *target_sym=NULL;
     char file_with_extension[256];
     sprintf(file_with_extension, "%s.am", filename);
     file = fopen(file_with_extension, "r");
@@ -75,7 +75,8 @@ int execute_pass2(const char *filename, SymbolNode *sym_head, InstructionNode *i
         /* STEP 3: Handle .entry directives */
         if (is_entry_directive(operation_word)) {
             /* Extract the operand (the symbol name) that comes after .entry */
-            if (sscanf(line_remainder, "%*s %s", operand) == 1) {
+           /* Extract the label operand correctly based on instruction type */
+          if (sscanf(line_remainder, "%*s %s", operand) == 1) {
                 /* Attempt to mark it in the symbol table */
                 if (!mark_symbol_as_entry(sym_head, operand)) {
                     fprintf(stderr, "Error in file %s (Line %d): Symbol '%s' declared as .entry but never defined.\n", 
@@ -115,10 +116,31 @@ int execute_pass2(const char *filename, SymbolNode *sym_head, InstructionNode *i
             strcmp(operation_word, "beq") == 0 || strcmp(operation_word, "bne") == 0 || strcmp(operation_word, "blt") == 0 || strcmp(operation_word, "bgt") == 0) {
             
             /* Extract the label operand */
-            if (sscanf(line_remainder, "%*s %s", operand) == 1) {
-                
+           /* Extract the label operand correctly based on instruction type */
+            int found_operand = 0;
+            
+            if (strcmp(operation_word, "jmp") == 0 || strcmp(operation_word, "la") == 0 || strcmp(operation_word, "call") == 0) {
+                if (sscanf(line_remainder, "%*s %s", operand) == 1) {
+                    found_operand = 1;
+                }
+            } else {
+                /* Branch instruction: label is located after the last comma */
+                char *last_comma = strrchr(line_remainder, ',');
+                if (last_comma != NULL) {
+                    if (sscanf(last_comma + 1, "%s", operand) == 1) {
+                        found_operand = 1;
+                    }
+                }
+            }
+
+            if (found_operand) {
                 /* Search for the FULL symbol node to get its address AND type */
-                SymbolNode *target_sym = find_symbol(sym_head, operand);
+                if (strcmp(operation_word, "jmp") == 0 && operand[0] == '$') {
+                    current_inst = current_inst->next;
+                    continue;
+                }
+                /* Search for the FULL symbol node to get its address AND type */
+              target_sym = find_symbol(sym_head, operand);
                 
                 if (target_sym != NULL) {
                     

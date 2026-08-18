@@ -20,7 +20,7 @@ boolean is_reserved_word(char *word) {
         /* פעולות מסוג J */
         "jmp", "la", "call", "hlt",
         /* הנחיות */
-        ".db", ".dw", ".dh", ".asciz", ".entry", ".extern",
+        ".db", ".dw", ".dh", ".asciz", ".entry", ".extern","asciz","dh","dw","db"
         /* מאקרו */
         "mcro", "mcroend"
     };

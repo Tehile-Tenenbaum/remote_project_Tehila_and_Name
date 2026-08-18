@@ -76,12 +76,9 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
                 first_word[strlen(first_word) - 1] = '\0'; /* Remove colon */
                 strcpy(label_name, first_word);
                 
+      
                 if (!is_valid_label_name(label_name)) {
-                    printf("Error at line %d: Invalid label name '%s'\n", line_number, label_name);
-                    error_found = TRUE;
-                }
-                if (!is_valid_label_name(label_name)) {
-                    printf("Error at line %d: Invalid label name '%s'\n", line_number, label_name);
+                    printf("Error in %s at line %d: Invalid label name '%s'\n", file_with_extension, line_number, label_name);
                     error_found = TRUE;
                 } else if (is_macro_name(label_name, macro_table)) {
                     printf("Error at line %d: Label '%s' is already used as a macro name\n", line_number, label_name);
@@ -105,7 +102,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
             /* Step 7: If there's a label, insert to symbol table with value DC and attribute 'data' */
             if (has_label) {
                 if (find_symbol(*symbol_table, label_name) != NULL) {
-                    printf("Error at line %d: Label '%s' already defined\n", line_number, label_name);
+                   printf("Error in %s at line %d: Label '%s' already defined\n", file_with_extension, line_number, label_name);
                     error_found = TRUE;
                 } else {
                     add_symbol(symbol_table, label_name, DC, SYMBOL_TYPE_DATA,line_number);
@@ -114,7 +111,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
             /* Step 8: Identify data type, encode to data image, update DC */
             index += strlen(current_word);
             if (!process_data_directive(line, &index, &DC, current_word, data_head)) {
-                printf("Error at line %d: Invalid data directive syntax\n", line_number);
+                printf("Error in %s at line %d: Invalid data directive syntax\n", file_with_extension, line_number);
                 error_found = TRUE;
             }
             continue; /* Go to next line (Step 2) */
@@ -135,7 +132,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
                 
                 if (sscanf(&line[index], "%s", ext_label) == 1) {
                     if (!is_valid_label_name(ext_label)) {
-                         printf("Error at line %d: Invalid extern label\n", line_number);
+                         printf("Error in %s at line %d: Invalid extern label\n",file_with_extension, line_number);
                          error_found = TRUE;
                     } else {
                          add_symbol(symbol_table, ext_label, 0, SYMBOL_TYPE_EXTERNAL,line_number);
@@ -149,7 +146,7 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
         /* Step 13: If there's a label, insert to symbol table with value IC and attribute 'code' */
         if (has_label) {
             if (find_symbol(*symbol_table, label_name) != NULL) {
-                printf("Error at line %d: Label '%s' already defined\n", line_number, label_name);
+          printf("Error in %s at line %d: Label '%s' already defined\n", file_with_extension, line_number, label_name);
                 error_found = TRUE;
             } else {
                 add_symbol(symbol_table, label_name, IC, SYMBOL_TYPE_CODE,line_number);
@@ -158,8 +155,8 @@ boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode
         
         /* Step 14 & 16: Encode instruction partially, update IC by 4 */
         index += strlen(current_word);
-       if (!process_instruction(line, &index, &IC, current_word, inst_head)) {
-            printf("Error at line %d: Invalid instruction syntax\n", line_number);
+       if (!process_instruction(line, &index, &IC, current_word, inst_head,line_number, file_with_extension)) {
+           
             error_found = TRUE;
         } 
     }

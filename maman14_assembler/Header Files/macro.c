@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include "macro.h"
 #include "utils.h"
-
+#include <ctype.h>
 /* 
  * Forward Declarations of Static Helper Functions
 */
@@ -57,8 +57,15 @@ boolean process_macros(char *base_filename, MacroNode **out_macro_head) {
     }
 
     /* Read the file line by line */
-    while (fgets(line, MAX_LINE_LENGTH, file_as) != NULL) {
+   while (fgets(line, MAX_LINE_LENGTH, file_as) != NULL) {
         line_number++;
+        if (strchr(line, '\n') == NULL && !feof(file_as)) {
+            int c;
+            printf("Error at line %d: Line exceeds maximum length of 80 characters.\n", line_number);
+            error_found = TRUE; /* סימון שגיאה כדי לבטל יצירת פלט */
+            /* מנקים (קוראים וזורקים) את שאר התווים עד שמגיעים לסוף השורה האמיתי */
+            while ((c = fgetc(file_as)) != '\n' && c != EOF);
+        }
         /* Extract the first word of the line safely (ignores leading whitespaces) */
         if (sscanf(line, "%s", first_word) != 1) {
             /* Empty line or just whitespaces - write as is if not inside macro */
@@ -88,8 +95,8 @@ boolean process_macros(char *base_filename, MacroNode **out_macro_head) {
         /* Case 2: End of a macro definition */
         if (strcmp(first_word, "mcroend") == 0) {
             if (!inside_macro) {
-                printf("Error at line %d: 'mcroend' encountered without a preceding 'mcro'.\n", line_number);
-                error_found = TRUE;
+               /* printf("Error at line %d: 'mcroend' encountered without a preceding 'mcro'.\n", line_number);*/
+                fputs(line, file_am);
                 continue;
             }
             
@@ -161,10 +168,10 @@ static boolean save_new_macro(MacroNode **head, char *line, MacroNode **current_
     char macro_name[MAX_LINE_LENGTH];
     char garbage[MAX_LINE_LENGTH];
     int parsed_items;
-    
+    int i;
     MacroNode *new_node;
     MacroNode *current;
-
+   
     /* Extract words from the line: expecting exactly "mcro" and "macro_name" */
     parsed_items = sscanf(line, "%s %s %s", keyword, macro_name, garbage);
 
@@ -176,7 +183,12 @@ static boolean save_new_macro(MacroNode **head, char *line, MacroNode **current_
         printf("Error at line %d: Extraneous text after macro name '%s'.\n", line_number, macro_name);
         return FALSE;
     }
-
+    for (i = 0; macro_name[i] != '\0'; i++) {
+        if (!isalnum((unsigned char)macro_name[i])&& macro_name[i] != '_') {
+            printf("Error at line %d: Invalid macro name '%s' (contains invalid characters).\n", line_number, macro_name);
+            return FALSE;
+        }
+    }
     /* Validation: Check if the macro name is a reserved assembly word */
     if (is_reserved_word(macro_name) == TRUE) {
         printf("Error at line %d: Macro name '%s' is a reserved word.\n", line_number, macro_name);
