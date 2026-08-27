@@ -7,7 +7,7 @@
  * Checks if a given word is a reserved assembly word.
  * Returns TRUE if it is reserved, FALSE otherwise.
  */
-boolean is_reserved_word(char *word);
+boolean is_reserved_word(const char *word);
 /*
  * Advances the index to skip any spaces or tabs in a string.
  * Modifies the index directly via a pointer.

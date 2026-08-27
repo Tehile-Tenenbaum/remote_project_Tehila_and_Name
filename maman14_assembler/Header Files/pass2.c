@@ -8,115 +8,100 @@
 #include "globals.h"
 #include "parser.h"
 #include "output_files.h"
-int find_symbol_address(SymbolNode *head, const char *name, int *address);
+#include "error.h"
 
-/*
- * ---------------------------------------------------------
- * Executes Pass 2:
- * 1. Reads the source file line by line.
- * 2. Marks .entry symbols in the symbol table.
- * 3. Completes missing addresses in I-type (branches) and J-type instructions.
- * ---------------------------------------------------------
- */
+/* Bit masks for instruction encoding */
+#define J_ADDRESS_MASK 0x1FFFFFF
+#define I_IMMED_MASK   0xFFFF
+
 int execute_pass2(const char *filename, SymbolNode *sym_head, InstructionNode *inst_head, ExternNode **ext_head) {
     FILE *file;
     char line[MAX_LINE_LENGTH];
-    char first_word[MAX_LABEL_LENGTH];
-    char second_word[MAX_LABEL_LENGTH];
-    char operand[MAX_LABEL_LENGTH];
+    char first_word[MAX_LINE_LENGTH];
+    char second_word[MAX_LINE_LENGTH];
+    char operand[MAX_LINE_LENGTH];
     int line_number = 0;
-    int error_flag = 0; /* 0 means success, 1 means errors found */
     
     InstructionNode *current_inst = inst_head; 
-     SymbolNode *target_sym=NULL;
-    char file_with_extension[256];
+    SymbolNode *target_sym = NULL;
+    char *file_with_extension;
+    size_t len;
+    
+    /* איפוס דגל השגיאות הגלובלי לקובץ הנוכחי */
+    error_found = FALSE;
+    
+    /* הקצאה דינמית לשם הקובץ */
+    len = strlen(filename);
+    file_with_extension = (char *)malloc(len + 4);
+    if (file_with_extension == NULL) {
+        printf("Memory allocation failed for filename.\n");
+        return PASS2_FAILURE;
+    }
+
     sprintf(file_with_extension, "%s.am", filename);
     file = fopen(file_with_extension, "r");
     if (file == NULL) {
-        fprintf(stderr, "Error: Could not open file '%s' for Pass 2.\n", file_with_extension);
-        return 0; /* Failure */
+        report_error(file_with_extension, 0, "Could not open file for Pass 2.");
+        free(file_with_extension);
+        return PASS2_FAILURE; 
     }
 
-    /* Read the file line by line */
     while (fgets(line, sizeof(line), file)) {
         char *operation_word = first_word;
         char *line_remainder = line;
         line_number++;
         
-        /* Clear buffers for the new line */
         memset(first_word, 0, sizeof(first_word));
         memset(second_word, 0, sizeof(second_word));
         memset(operand, 0, sizeof(operand));
 
-        /* Extract the first and second words to analyze the line */
         sscanf(line, "%s %s", first_word, second_word);
 
-        /* STEP 1: Skip empty lines and comment lines */
+        /* התעלמות משורות ריקות או הערות */
         if (first_word[0] == '\0' || first_word[0] == ';') {
             continue;
         }
 
-        /* 
-         * STEP 2: Handle labels at the beginning of the line.
-         * If the first word ends with ':', it's a label definition.
-         * We skip it and analyze the second word instead.
-         */
+        /* דילוג על הגדרת תווית בתחילת שורה */
         if (first_word[strlen(first_word) - 1] == ':') {
             operation_word = second_word;
-            /* Advance the line pointer past the label to extract operands later if needed */
             line_remainder = strstr(line, second_word); 
         }
 
-        /* If there's nothing after the label, skip the line */
         if (operation_word == NULL || operation_word[0] == '\0') {
             continue;
         }
 
-        /* STEP 3: Handle .entry directives */
+        /* טיפול בהנחיות .entry */
         if (is_entry_directive(operation_word)) {
-            /* Extract the operand (the symbol name) that comes after .entry */
-           /* Extract the label operand correctly based on instruction type */
-          if (sscanf(line_remainder, "%*s %s", operand) == 1) {
-                /* Attempt to mark it in the symbol table */
-                if (!mark_symbol_as_entry(sym_head, operand)) {
-                    fprintf(stderr, "Error in file %s (Line %d): Symbol '%s' declared as .entry but never defined.\n", 
-                            filename, line_number, operand);
-                    error_flag = 1;
+            if (sscanf(line_remainder, "%*s %s", operand) == 1) {
+                SymbolNode *sym = find_symbol(sym_head, operand);
+                
+                if (sym != NULL && sym->type == SYMBOL_TYPE_EXTERNAL) {
+                    report_error(file_with_extension, line_number, "Symbol '%s' is external and cannot be declared as .entry.", operand);
+                } else if (!mark_symbol_as_entry(sym_head, operand)) {
+                    report_error(file_with_extension, line_number, "Symbol '%s' declared as .entry but never defined.", operand);
                 }
             } else {
-                fprintf(stderr, "Error in file %s (Line %d): Missing operand for .entry directive.\n", filename, line_number);
-                error_flag = 1;
+                report_error(file_with_extension, line_number, "Missing operand for .entry directive.");
             }
-            continue; /* Move to the next line */
+            continue; 
         }
 
-        /* 
-         * STEP 4: Skip data and extern directives.
-         * We already handled .db, .dh, .dw, .asciz, and .extern in Pass 1. 
-         */
+        /* התעלמות מנתונים או מ-extern שטופלו כבר במעבר הראשון */
         if (is_data_directive(operation_word) || is_extern_directive(operation_word)) {
             continue;
         }
 
-        /* 
-         * STEP 5: Handle code instructions.
-         * At this point, the line is a valid code instruction.
-         */
         if (current_inst == NULL) {
-            fprintf(stderr, "Critical Error: Instruction image size mismatch at line %d.\n", line_number);
-            error_flag = 1;
+            report_error(file_with_extension, line_number, "Critical Error: Instruction image size mismatch.");
             break;
         }
 
-        /* 
-         * Check if this specific instruction requires us to fill in a missing label address.
-         * Instructions that use labels are J-type (jmp, la, call) and I-type branches (beq, bne, blt, etc.)
-         */
-      if (strcmp(operation_word, "jmp") == 0 || strcmp(operation_word, "la") == 0 || strcmp(operation_word, "call") == 0 ||
+        /* בדיקה אם זו פקודה שדורשת השלמת כתובת */
+        if (strcmp(operation_word, "jmp") == 0 || strcmp(operation_word, "la") == 0 || strcmp(operation_word, "call") == 0 ||
             strcmp(operation_word, "beq") == 0 || strcmp(operation_word, "bne") == 0 || strcmp(operation_word, "blt") == 0 || strcmp(operation_word, "bgt") == 0) {
             
-            /* Extract the label operand */
-           /* Extract the label operand correctly based on instruction type */
             int found_operand = 0;
             
             if (strcmp(operation_word, "jmp") == 0 || strcmp(operation_word, "la") == 0 || strcmp(operation_word, "call") == 0) {
@@ -124,7 +109,7 @@ int execute_pass2(const char *filename, SymbolNode *sym_head, InstructionNode *i
                     found_operand = 1;
                 }
             } else {
-                /* Branch instruction: label is located after the last comma */
+                /* מציאת האופרנד האחרון (אחרי הפסיק) לפקודות התניה */
                 char *last_comma = strrchr(line_remainder, ',');
                 if (last_comma != NULL) {
                     if (sscanf(last_comma + 1, "%s", operand) == 1) {
@@ -134,51 +119,52 @@ int execute_pass2(const char *filename, SymbolNode *sym_head, InstructionNode *i
             }
 
             if (found_operand) {
-                /* Search for the FULL symbol node to get its address AND type */
+                /* קפיצה ישירה לרגיסטר לא דורשת השלמת כתובת מהטבלה */
                 if (strcmp(operation_word, "jmp") == 0 && operand[0] == '$') {
                     current_inst = current_inst->next;
                     continue;
                 }
-                /* Search for the FULL symbol node to get its address AND type */
-              target_sym = find_symbol(sym_head, operand);
                 
+                target_sym = find_symbol(sym_head, operand);
                 if (target_sym != NULL) {
                     
-                    /* Fill the "hole" left in Pass 1 with safe bitwise operations */
-                    
-                    /* For J-type instructions (jmp, la, call), insert the absolute address */
-                    if (strcmp(operation_word, "jmp") == 0 || strcmp(operation_word, "la") == 0 || strcmp(operation_word, "call") == 0) {
-                        current_inst->word.machine_code |= (target_sym->address & 0x1FFFFFF);
-                    } 
-                    /* For I-type branch instructions, insert the relative distance */
-                    else {
-                        long distance = target_sym->address - current_inst->address;
-                        current_inst->word.machine_code |= (distance & 0xFFFF);
+                    /* חסימת קפיצה מותנית לתווית חיצונית */
+                    if (target_sym->type == SYMBOL_TYPE_EXTERNAL) {
+                        if (strcmp(operation_word, "beq") == 0 || strcmp(operation_word, "bne") == 0 ||
+                            strcmp(operation_word, "blt") == 0 || strcmp(operation_word, "bgt") == 0) {
+                            report_error(file_with_extension, line_number, "Conditional branch instruction '%s' cannot use external symbol '%s'.", operation_word, operand);
+                            current_inst = current_inst->next;
+                            continue;
+                        }
                     }
 
-                    /* --- EXTERNAL USAGE LOGIC --- */
-                    /* If the symbol used is external, we must add it to the .ext file list */
+                    /* קידוד הכתובת החסרה תוך שימוש במסכות */
+                    if (strcmp(operation_word, "jmp") == 0 || strcmp(operation_word, "la") == 0 || strcmp(operation_word, "call") == 0) {
+                        current_inst->word.machine_code |= (target_sym->address & J_ADDRESS_MASK);
+                    } else {
+                        long distance = target_sym->address - current_inst->address;
+                        current_inst->word.machine_code |= (distance & I_IMMED_MASK);
+                    }
+
+                    /* רישום קריאה לתווית חיצונית עבור קובץ ה-.ext */
                     if (target_sym->type == SYMBOL_TYPE_EXTERNAL) {
                         add_extern_usage(ext_head, operand, current_inst->address);
                     }
                     
-                } else {
-                    fprintf(stderr, "Error in file %s (Line %d): Undefined symbol '%s' used as operand.\n", 
-                            filename, line_number, operand);
-                    error_flag = 1;
+                } else {    
+                    report_error(file_with_extension, line_number, "Undefined symbol '%s' used as operand.", operand);
                 }
             }
         }
 
-        /* 
-         * CRITICAL: Advance the instruction pointer for EVERY valid code line!
-         */
         current_inst = current_inst->next;
     }
 
     fclose(file);
+    free(file_with_extension);
 
-    /* Return 1 (success) ONLY if no errors were found throughout Pass 2 */
-    return (error_flag == 0) ? 1 : 0;
+    /* הפונקציה מצליחה אך ורק אם לא נדלק דגל השגיאות */
+    return (error_found == FALSE) ? PASS2_SUCCESS : PASS2_FAILURE;
 }
+
 

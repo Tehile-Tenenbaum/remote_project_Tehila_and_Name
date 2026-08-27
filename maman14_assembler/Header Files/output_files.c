@@ -5,29 +5,42 @@
 #include "symbol_table.h"
 #include "output_files.h"
 #include "globals.h"
+#include "error.h"
 
-/* 
- * ---------------------------------------------------------
- * Creates the .ob (Object) file containing the machine code.
- * ---------------------------------------------------------
- */
+/* Constants for bitwise operations and formatting */
+#define BYTE_MASK       0xFF
+#define SHIFT_8_BITS    8
+#define SHIFT_16_BITS   16
+#define SHIFT_24_BITS   24
+#define BYTES_PER_LINE  4
+
 void create_ob_file(const char *filename, InstructionNode *inst_head, DataNode *data_head, int icf, int dcf) {
     FILE *file;
-    char ob_filename[MAX_LABEL_LENGTH];
+    char *ob_filename;
+    size_t len;
     InstructionNode *inst_curr = inst_head;
     DataNode *data_curr = data_head;
     int data_byte_count = 0;
+    
+    /* הקצאה דינמית לשם הקובץ */
+    len = strlen(filename);
+    ob_filename = (char *)malloc(len + 4); /* ".ob" + '\0' */
+    if (ob_filename == NULL) {
+        printf("Memory allocation failed for .ob filename.\n");
+        return;
+    }
     
     sprintf(ob_filename, "%s.ob", filename);
     
     file = fopen(ob_filename, "w");
     if (file == NULL) {
-        fprintf(stderr, "Error: Cannot create output file '%s'.\n", ob_filename);
+        report_error(ob_filename, 0, "Cannot create output file.");
+        free(ob_filename);
         return;
     }
     
     /* Print Header: Instruction image size and Data image size */
-    fprintf(file, "\t%d %d\n", icf - IC_INIT_VALUE, dcf);
+    fprintf(file, "     %d %d\n", icf - IC_INIT_VALUE, dcf);
     
     /* 1. Print Instruction Image */
     while (inst_curr != NULL) {
@@ -35,24 +48,24 @@ void create_ob_file(const char *filename, InstructionNode *inst_head, DataNode *
         
         fprintf(file, "%04d %02X %02X %02X %02X\n", 
                 inst_curr->address,
-                val & 0xFF,               /* Bits 0-7 */
-                (val >> 8) & 0xFF,        /* Bits 8-15 */
-                (val >> 16) & 0xFF,       /* Bits 16-23 */
-                (val >> 24) & 0xFF);      /* Bits 24-31 */
+                val & BYTE_MASK,
+                (val >> SHIFT_8_BITS) & BYTE_MASK,
+                (val >> SHIFT_16_BITS) & BYTE_MASK,
+                (val >> SHIFT_24_BITS) & BYTE_MASK);
                 
         inst_curr = inst_curr->next;
     }
     
     /* 2. Print Data Image (4 bytes per line format) */
     while (data_curr != NULL) {
-        if (data_byte_count % 4 == 0) {
+        if (data_byte_count % BYTES_PER_LINE == 0) {
             if (data_byte_count > 0) {
                 fprintf(file, "\n"); 
             }
-            fprintf(file, "%04d", data_curr->address+icf);
+            fprintf(file, "%04d", data_curr->address + icf);
         }
         
-        fprintf(file, " %02X", data_curr->byte & 0xFF);
+        fprintf(file, " %02X", data_curr->byte & BYTE_MASK);
         
         data_byte_count++;
         data_curr = data_curr->next;
@@ -63,21 +76,17 @@ void create_ob_file(const char *filename, InstructionNode *inst_head, DataNode *
     }
     
     fclose(file);
+    free(ob_filename); /* שחרור הזיכרון */
 }
 
-/* 
- * ---------------------------------------------------------
- * Creates the .ent (Entries) file.
- * Only creates the file if there is at least one .entry symbol.
- * ---------------------------------------------------------
- */
 void create_ent_file(const char *filename, SymbolNode *sym_head) {
     SymbolNode *curr = sym_head;
     int has_entry = 0;
     FILE *file;
-    char ent_filename[256];
+    char *ent_filename;
+    size_t len;
 
-    /* First, check if there are any entry symbols to avoid creating an empty file */
+    /* Check if there are any entry symbols */
     while (curr != NULL) {
         if (curr->is_entry) {
             has_entry = 1;
@@ -90,10 +99,19 @@ void create_ent_file(const char *filename, SymbolNode *sym_head) {
         return; /* No entry symbols found, do not create .ent file */
     }
 
+    /* הקצאה דינמית לשם הקובץ */
+    len = strlen(filename);
+    ent_filename = (char *)malloc(len + 5); /* ".ent" + '\0' */
+    if (ent_filename == NULL) {
+        printf("Memory allocation failed for .ent filename.\n");
+        return;
+    }
+
     sprintf(ent_filename, "%s.ent", filename);
     file = fopen(ent_filename, "w");
     if (file == NULL) {
-        fprintf(stderr, "Error: Cannot create output file '%s'.\n", ent_filename);
+        report_error(ent_filename, 0, "Cannot create output file.");
+        free(ent_filename);
         return;
     }
 
@@ -107,27 +125,32 @@ void create_ent_file(const char *filename, SymbolNode *sym_head) {
     }
 
     fclose(file);
+    free(ent_filename); /* שחרור הזיכרון */
 }
 
-/* 
- * ---------------------------------------------------------
- * Creates the .ext (Externals) file.
- * Only creates the file if there is at least one external usage.
- * ---------------------------------------------------------
- */
 void create_ext_file(const char *filename, ExternNode *ext_head) {
     FILE *file;
-    char ext_filename[256];
+    char *ext_filename;
+    size_t len;
     ExternNode *curr = ext_head;
 
     if (ext_head == NULL) {
         return; /* No external usages found, do not create .ext file */
     }
 
+    /* הקצאה דינמית לשם הקובץ */
+    len = strlen(filename);
+    ext_filename = (char *)malloc(len + 5); /* ".ext" + '\0' */
+    if (ext_filename == NULL) {
+        printf("Memory allocation failed for .ext filename.\n");
+        return;
+    }
+
     sprintf(ext_filename, "%s.ext", filename);
     file = fopen(ext_filename, "w");
     if (file == NULL) {
-        fprintf(stderr, "Error: Cannot create output file '%s'.\n", ext_filename);
+        report_error(ext_filename, 0, "Cannot create output file.");
+        free(ext_filename);
         return;
     }
 
@@ -138,19 +161,15 @@ void create_ext_file(const char *filename, ExternNode *ext_head) {
     }
 
     fclose(file);
+    free(ext_filename); /* שחרור הזיכרון */
 }
 
-/* 
- * ---------------------------------------------------------
- * Adds a new node to the external usages linked list.
- * ---------------------------------------------------------
- */
 void add_extern_usage(ExternNode **head, const char *name, int address) {
     ExternNode *new_node = (ExternNode *)malloc(sizeof(ExternNode));
     ExternNode *temp = *head;
 
     if (new_node == NULL) {
-        fprintf(stderr, "Error: Memory allocation failed for ExternNode.\n");
+        report_error("Internal", 0, "Memory allocation failed for ExternNode.");
         exit(1);
     }
 
@@ -169,11 +188,6 @@ void add_extern_usage(ExternNode **head, const char *name, int address) {
     temp->next = new_node;
 }
 
-/* 
- * ---------------------------------------------------------
- * Frees all memory allocated for the external usages list.
- * ---------------------------------------------------------
- */
 void free_extern_list(ExternNode **head) {
     ExternNode *temp;
 

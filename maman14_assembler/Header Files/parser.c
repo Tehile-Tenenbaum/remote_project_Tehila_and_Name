@@ -6,15 +6,11 @@
 #include "parser.h"
 #include "utils.h"
 #include "image.h"
-/* Declarations of external functions for adding data/code and skipping spaces */
+#include "error.h"
+
 extern void skip_white_spaces(char *line, int *index);
 
-/*
- * Function: is_data_directive
- * ---------------------------
- * Checks if a given word is a data directive (.db, .dh, .dw, .asciz).
- */
-boolean is_data_directive(char *word) {
+boolean is_data_directive(const char *word) {
     if (strcmp(word, ".db") == 0 || strcmp(word, ".dh") == 0 ||
         strcmp(word, ".dw") == 0 || strcmp(word, ".asciz") == 0) {
         return TRUE;
@@ -22,89 +18,34 @@ boolean is_data_directive(char *word) {
     return FALSE;
 }
 
-/*
- * Function: is_extern_directive
- * -----------------------------
- * Checks if a given word is the .extern directive.
- */
-boolean is_extern_directive(char *word) {
-    if (strcmp(word, ".extern") == 0) {
-        return TRUE;
-    }
-    return FALSE;
+boolean is_extern_directive(const char *word) {
+    return (strcmp(word, ".extern") == 0) ? TRUE : FALSE;
 }
 
-/*
- * Function: is_entry_directive
- * ----------------------------
- * Checks if a given word is the .entry directive.
- */
-boolean is_entry_directive(char *word) {
-    if (strcmp(word, ".entry") == 0) {
-        return TRUE;
-    }
-    return FALSE;
+boolean is_entry_directive(const char *word) {
+    return (strcmp(word, ".entry") == 0) ? TRUE : FALSE;
 }
 
-/*
- * Function: split_operands
- * -------------------------
- * מפרקת את מה שנשאר בשורה (החל מ-index) לרשימת אופרנדים מופרדים בפסיק.
- * שומרת רק עד 3 אופרנדים בפועל בתוך tokens (זה המקסימום האפשרי בכל הוראה
- * בשפה הזו), אבל ממשיכה לספור גם אם יש יותר - כדי שאפשר יהיה לזהות
- * "יותר מדי אופרנדים" כשגיאה. לאחר הקריאה, *index מצביע לתו הראשון
- * שאחרי האופרנד האחרון שנקרא (כדי לבדוק גרביג' בעזרת check_no_garbage).
- */
- int split_operands(char *line, int *index, char tokens[MAX_OPERANDS][MAX_LABEL_LENGTH]) {
-    int count = 0;
-    char dummy[32];
-    char *dest;
-
-    skip_white_spaces(line, index);
-    while (line[*index] != '\0' && line[*index] != '\n' && line[*index] != '\r') {
-        int j = 0;
-        dest = (count < 3) ? tokens[count] : dummy;
-
-        while (line[*index] != ',' && line[*index] != '\0' && line[*index] != '\n' &&
-               line[*index] != '\r' && line[*index] != ' ' && line[*index] != '\t' && j < MAX_LABEL_LENGTH-1) {
-            dest[j++] = line[(*index)++];
-        }
-        dest[j] = '\0';
-        count++;
-
-        skip_white_spaces(line, index);
-        if (line[*index] == ',') {
-            (*index)++;
-            skip_white_spaces(line, index);
-        } else {
-            break; /* אין פסיק - סיימנו לקרוא אופרנדים */
-        }
-    }
-    return count;
-}
-
-/*
- * Function: parse_register
- * -------------------------
- * בודקת שהטוקן הוא רגיסטר תקין בצורה $0 עד $31 (ללא תווים מיותרים
- * אחרי המספר), ומחזירה את מספר הרגיסטר דרך reg_num.
- */
-boolean parse_register(char *token, int *reg_num, int line_number, char *filename) {
+boolean parse_register(const char *token, int *reg_num, int line_number, const char *filename) {
     int num, chars_read;
     
     if (token[0] != '$') {
-        printf("Error in %s at line %d: Invalid operand, expected register\n", filename, line_number);
+        report_error(filename, line_number, "Invalid operand, expected register.");
         return FALSE;
     }
+    /* חסימת אפסים מובילים */
+if (token[1] == '0' && token[2] != '\0') {
+    report_error(filename, line_number, "Register names cannot have leading zeros.");
+    return FALSE;
+}
     
     if (sscanf(token + 1, "%d%n", &num, &chars_read) != 1 || token[1 + chars_read] != '\0') {
-        printf("Error in %s at line %d: Unknown register name\n", filename, line_number);
+        report_error(filename, line_number, "Unknown register name.");
         return FALSE;
     }
     
-    /* הבדיקה שלנו: אם מספר הרגיסטר גדול מ-31 או קטן מ-0 */
     if (num < 0 || num > MAX_REGISTER) {
-        printf("Error in %s at line %d: Unknown register name\n", filename, line_number);
+        report_error(filename, line_number, "Unknown register name (out of bounds).");
         return FALSE;
     }
     
@@ -112,32 +53,72 @@ boolean parse_register(char *token, int *reg_num, int line_number, char *filenam
     return TRUE;
 }
 
-/*
- * Function: process_instruction
- * -----------------------------
- * מנתחת ומקודדת שורת הוראה בודדת (32 סיביות), כולל כל האופרנדים
- * שלה, לפי סוג ההוראה (R / I / J). אופרנדים שהם תוויות (jmp/la/call
- * ללא רגיסטר, וכן היעד של beq/bne/blt/bgt) לא מקודדים כאן במלואם -
- * הם יושלמו ב-Pass 2, לאחר שכל הכתובות ידועות.
- */
+int split_operands(char *line, int *index, char tokens[MAX_OPERANDS][MAX_LABEL_LENGTH], int line_number, const char *filename) {
+    int count = 0;
+    char dummy[MAX_LABEL_LENGTH];
+    char *dest;
+    boolean expect_comma = FALSE;
 
-boolean process_instruction(char *line, int *index, int *IC, char *operation, InstructionNode **inst_head, int line_number, char *filename) {
+    skip_white_spaces(line, index);
+
+    if (line[*index] == ',') {
+        report_error(filename, line_number, "Illegal comma before first operand.");
+        return -1;
+    }
+
+    while (line[*index] != '\0' && line[*index] != '\n' && line[*index] != '\r') {
+        if (expect_comma) {
+            if (line[*index] != ',') {
+                report_error(filename, line_number, "Missing comma between operands or extraneous text.");
+                return -1;
+            }
+            (*index)++; 
+            skip_white_spaces(line, index);
+
+            if (line[*index] == '\0' || line[*index] == '\n' || line[*index] == '\r') {
+                report_error(filename, line_number, "Illegal comma at the end of command.");
+                return -1;
+            }
+            if (line[*index] == ',') {
+                report_error(filename, line_number, "Multiple consecutive commas.");
+                return -1;
+            }
+            expect_comma = FALSE;
+        } else {
+            int j = 0;
+            dest = (count < MAX_OPERANDS) ? tokens[count] : dummy;
+
+            while (line[*index] != ',' && line[*index] != '\0' && line[*index] != '\n' &&
+                   line[*index] != '\r' && line[*index] != ' ' && line[*index] != '\t' && j < MAX_LABEL_LENGTH - 1) {
+                dest[j++] = line[(*index)++];
+            }
+            dest[j] = '\0';
+            count++;
+
+            skip_white_spaces(line, index);
+            expect_comma = TRUE; 
+        }
+    }
+    return count;
+}
+
+boolean process_instruction(char *line, int *index, int *IC, const char *operation, InstructionNode **inst_head, int line_number, const char *filename) {
     unsigned long first_word = 0;
     char tokens[MAX_OPERANDS][MAX_LABEL_LENGTH];
     int num_tokens;
-
+    int chars_read = 0;
+    
     skip_white_spaces(line, index);
-    num_tokens = split_operands(line, index, tokens);
+    
+    num_tokens = split_operands(line, index, tokens, line_number, filename);
 
-    /* בדיקת זבל או פסיקים מיותרים בסוף */
-    if (!check_no_garbage(line, *index)) {
-        printf("Error in %s at line %d: Extraneous text or illegal comma after end of command\n", filename, line_number);
-        return FALSE;
+    if (num_tokens < 0) {
+        return FALSE; 
     }
 
     if (strcmp(operation, "hlt") == 0) {
         if (num_tokens != 0) {
-            printf("Error in %s at line %d: Extraneous text after end of command\n", filename, line_number);
+            report_error(filename, line_number, "Extraneous text after end of command.");
             return FALSE;
         }
         first_word = (OPCODE_HLT << OPCODE_SHIFT);
@@ -147,13 +128,14 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
              strcmp(operation, "nor") == 0) {
         unsigned long funct = FUNCT_ADD;
         int rs, rt, rd;
+        
         if (strcmp(operation, "sub") == 0) funct = FUNCT_SUB;
         else if (strcmp(operation, "and") == 0) funct = FUNCT_AND;
         else if (strcmp(operation, "or") == 0) funct = FUNCT_OR;
         else if (strcmp(operation, "nor") == 0) funct = FUNCT_NOR;
 
         if (num_tokens != MAX_OPERANDS) {
-            printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+            report_error(filename, line_number, "Invalid number of operands for R-arithmetic instruction.");
             return FALSE;
         }
         if (!parse_register(tokens[0], &rs, line_number, filename)) return FALSE;
@@ -171,7 +153,7 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
         else if (strcmp(operation, "mvlo") == 0) funct = FUNCT_MVLO;
 
         if (num_tokens != 2) {
-             printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+             report_error(filename, line_number, "Invalid number of operands for R-move instruction.");
              return FALSE;
         }
         if (!parse_register(tokens[0], &dest, line_number, filename)) return FALSE;
@@ -191,16 +173,16 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
         else if (strcmp(operation, "nori") == 0) opcode = OPCODE_NORI;
 
         if (num_tokens != MAX_OPERANDS) {
-            printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+            report_error(filename, line_number, "Invalid number of operands for I-arithmetic instruction.");
             return FALSE;
         }
         if (!parse_register(tokens[0], &rs, line_number, filename)) return FALSE;
-        if (sscanf(tokens[1], "%d", &immed) != 1) {
-            printf("Error in %s at line %d: Invalid immediate operand\n", filename, line_number);
+        if (sscanf(tokens[1], "%d%n", &immed, &chars_read) != 1 || tokens[1][chars_read] != '\0') {
+            report_error(filename, line_number, "Invalid immediate operand.");
             return FALSE;
         }
         if (immed < MIN_IMMED || immed > MAX_IMMED) {
-            printf("Error in %s at line %d: Immediate value out of range\n", filename, line_number);
+            report_error(filename, line_number, "Immediate value out of range.");
             return FALSE;
         }
         if (!parse_register(tokens[2], &rt, line_number, filename)) return FALSE;
@@ -217,12 +199,15 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
         else if (strcmp(operation, "bgt") == 0) opcode = OPCODE_BGT;
 
         if (num_tokens != MAX_OPERANDS) {
-            printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+            report_error(filename, line_number, "Invalid number of operands for branching instruction.");
             return FALSE;
         }
         if (!parse_register(tokens[0], &rs, line_number, filename)) return FALSE;
         if (!parse_register(tokens[1], &rt, line_number, filename)) return FALSE;
-
+        if (!is_valid_label_name(tokens[2])) {
+            report_error(filename, line_number, "Invalid label name '%s' as operand.", tokens[2]);
+            return FALSE;
+        }
         first_word = (opcode << OPCODE_SHIFT) | ((unsigned long)rs << RS_SHIFT) | ((unsigned long)rt << RT_SHIFT);
     }
     else if (strcmp(operation, "lb") == 0 || strcmp(operation, "sb") == 0 ||
@@ -230,6 +215,7 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
              strcmp(operation, "lh") == 0 || strcmp(operation, "sh") == 0) {
         unsigned long opcode;
         int rs, rt, immed;
+        
         if (strcmp(operation, "lb") == 0) opcode = OPCODE_LB;
         else if (strcmp(operation, "sb") == 0) opcode = OPCODE_SB;
         else if (strcmp(operation, "lw") == 0) opcode = OPCODE_LW;
@@ -238,16 +224,18 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
         else opcode = OPCODE_SH;
 
         if (num_tokens != MAX_OPERANDS) {
-            printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+            report_error(filename, line_number, "Invalid number of operands for load/store instruction.");
             return FALSE;
         }
         if (!parse_register(tokens[0], &rs, line_number, filename)) return FALSE;
-        if (sscanf(tokens[1], "%d", &immed) != 1) {
-            printf("Error in %s at line %d: Invalid immediate operand\n", filename, line_number);
+        
+        chars_read=0;
+        if (sscanf(tokens[1], "%d%n", &immed, &chars_read) != 1 || tokens[1][chars_read] != '\0') {
+            report_error(filename, line_number, "Invalid immediate operand.");
             return FALSE;
         }
         if (immed < MIN_IMMED || immed > MAX_IMMED) {
-             printf("Error in %s at line %d: Immediate value out of range\n", filename, line_number);
+             report_error(filename, line_number, "Immediate value out of range.");
              return FALSE;
         }
         if (!parse_register(tokens[2], &rt, line_number, filename)) return FALSE;
@@ -257,7 +245,7 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
     }
     else if (strcmp(operation, "jmp") == 0) {
         if (num_tokens != 1) {
-            printf("Error in %s at line %d: Too many commas or invalid number of operands\n", filename, line_number);
+            report_error(filename, line_number, "Invalid number of operands for jmp instruction.");
             return FALSE;
         }
         if (tokens[0][0] == '$') {
@@ -265,42 +253,41 @@ boolean process_instruction(char *line, int *index, int *IC, char *operation, In
             if (!parse_register(tokens[0], &reg, line_number, filename)) return FALSE;
             first_word = (OPCODE_JMP << OPCODE_SHIFT) | (1UL << J_REG_SHIFT) | (unsigned long)reg;
         } else {
+            if (!is_valid_label_name(tokens[0])) {
+                report_error(filename, line_number, "Invalid label name '%s' as operand.", tokens[0]);
+                return FALSE;
+            }
             first_word = (OPCODE_JMP << OPCODE_SHIFT);
         }
     }
-    else if (strcmp(operation, "la") == 0) {
+    else if (strcmp(operation, "la") == 0 || strcmp(operation, "call") == 0) {
         if (num_tokens != 1 || tokens[0][0] == '$') {
-             printf("Error in %s at line %d: Invalid operand for 'la' instruction\n", filename, line_number);
+             report_error(filename, line_number, "Invalid operand for %s instruction.", operation);
              return FALSE;
         }
-        first_word = (OPCODE_LA << OPCODE_SHIFT);
-    }
-    else if (strcmp(operation, "call") == 0) {
-        if (num_tokens != 1 || tokens[0][0] == '$') {
-             printf("Error in %s at line %d: Invalid operand for 'call' instruction\n", filename, line_number);
-             return FALSE;
+        if (!is_valid_label_name(tokens[0])) {
+            report_error(filename, line_number, "Invalid label name '%s' as operand.", tokens[0]);
+            return FALSE;
         }
-        first_word = (OPCODE_CALL << OPCODE_SHIFT);
+        first_word = (strcmp(operation, "la") == 0) ? (OPCODE_LA << OPCODE_SHIFT) : (OPCODE_CALL << OPCODE_SHIFT);
     }
     else {
-        printf("Error in %s at line %d: Unknown opcode\n", filename, line_number);
+        report_error(filename, line_number, "Unknown opcode '%s'.", operation);
         return FALSE;
     }
 
     add_to_code_image(first_word, IC, inst_head);
     return TRUE;
 }
-/*
- * Function: process_data_directive
- * --------------------------------
- */
-boolean process_data_directive(char *line, int *index, int *DC, char *directive, DataNode **data_head) {
-    int size_in_bytes = 1; /* Default size for .db */
+
+boolean process_data_directive(char *line, int *index, int *DC, const char *directive, DataNode **data_head, int line_number, const char *filename) {
+    int size_in_bytes = 1;
 
     skip_white_spaces(line, index);
 
     if (strcmp(directive, ".asciz") == 0) {
         if (line[*index] != '"') {
+            report_error(filename, line_number, "Missing opening quote for .asciz string.");
             return FALSE;
         }
         (*index)++;
@@ -311,12 +298,17 @@ boolean process_data_directive(char *line, int *index, int *DC, char *directive,
         }
 
         if (line[*index] != '"') {
+            report_error(filename, line_number, "Missing closing quote in .asciz string.");
             return FALSE;
         }
         (*index)++;
 
         add_to_data_image(0, 1, DC, data_head);
-        return check_no_garbage(line, *index);
+        if (!check_no_garbage(line, *index)) {
+            report_error(filename, line_number, "Extraneous text after string.");
+            return FALSE;
+        }
+        return TRUE;
     }
 
     if (strcmp(directive, ".dh") == 0) {
@@ -324,28 +316,38 @@ boolean process_data_directive(char *line, int *index, int *DC, char *directive,
     } else if (strcmp(directive, ".dw") == 0) {
         size_in_bytes = 4;
     }
- skip_white_spaces(line, index);
+
+    skip_white_spaces(line, index);
     if (line[*index] == ',') {
-        return FALSE; /* פסיק לפני המספר הראשון אסור */
+        report_error(filename, line_number, "Illegal comma before first number.");
+        return FALSE;
     }
+
     while (line[*index] != '\0' && line[*index] != '\n' && line[*index] != '\r') {
         long value;
         int chars_read = 0;
 
         skip_white_spaces(line, index);
 
-        if (line[*index] == '\0' || line[*index] == '\n' || line[*index] == '\r') {
-            break;
-        }
+        if (line[*index] == '\0' || line[*index] == '\n' || line[*index] == '\r') break;
 
         if (sscanf(&line[*index], "%ld%n", &value, &chars_read) != 1) {
+            report_error(filename, line_number, "Invalid data syntax or missing number.");
             return FALSE;
         }
 
-        /* בדיקת טווח לפי גודל התא (סעיף שסטודנטיות תיקנו קודם) */
-    if (size_in_bytes == 1 && (value < MIN_DB || value > MAX_DB)) return FALSE;
-        if (size_in_bytes == 2 && (value < MIN_DH || value > MAX_DH)) return FALSE;
-        if (size_in_bytes == 4 && (value < MIN_DW || value > MAX_DW)) return FALSE;
+        if (size_in_bytes == 1 && (value < MIN_DB || value > MAX_DB)) {
+            report_error(filename, line_number, "Value %ld is out of range for .db directive.", value);
+            return FALSE;
+        }
+        if (size_in_bytes == 2 && (value < MIN_DH || value > MAX_DH)) {
+            report_error(filename, line_number, "Value %ld is out of range for .dh directive.", value);
+            return FALSE;
+        }
+        if (size_in_bytes == 4 && (value < MIN_DW || value > MAX_DW)) {
+            report_error(filename, line_number, "Value %ld is out of range for .dw directive.", value);
+            return FALSE;
+        }
 
         *index += chars_read;
         add_to_data_image(value, size_in_bytes, DC, data_head);
@@ -355,17 +357,17 @@ boolean process_data_directive(char *line, int *index, int *DC, char *directive,
         if (line[*index] == ',') {
             (*index)++;
             skip_white_spaces(line, index);
-             if (line[*index] == '\0' || line[*index] == '\n' || line[*index] == '\r') {
-                return FALSE; /* פסיק אחרי המספר האחרון (בסוף השורה) אסור */
+            
+            if (line[*index] == '\0' || line[*index] == '\n' || line[*index] == '\r') {
+                report_error(filename, line_number, "Illegal comma at the end of data directive.");
+                return FALSE; 
             }
             if (line[*index] == ',') {
-                return FALSE; /* פסיק כפול (רצוף) אסור */
-            }
-           
-            if (line[*index] == '\0' || line[*index] == '\n' || line[*index] == '\r') {
-                return FALSE;
+                report_error(filename, line_number, "Multiple consecutive commas are not allowed.");
+                return FALSE; 
             }
         } else if (line[*index] != '\0' && line[*index] != '\n' && line[*index] != '\r') {
+            report_error(filename, line_number, "Missing comma or extraneous text after number.");
             return FALSE;
         }
     }
@@ -373,10 +375,6 @@ boolean process_data_directive(char *line, int *index, int *DC, char *directive,
     return TRUE;
 }
 
-/*
- * Function: add_to_data_image
- * ---------------------------
- */
 void add_to_data_image(long value, int size_in_bytes, int *DC, DataNode **data_head) {
     int i;
     for (i = 0; i < size_in_bytes; i++) {
@@ -386,13 +384,6 @@ void add_to_data_image(long value, int size_in_bytes, int *DC, DataNode **data_h
     }
 }
 
-/*
- * Function: add_to_code_image
- * ---------------------------
- * מוסיפה הוראה לתמונת הזיכרון ומקדמת את IC ב-4. זהו המקום היחיד
- * שבו IC מתקדם - ב-pass1.c אין להוסיף עוד IC += 4 אחרי הקריאה
- * לפונקציית process_instruction, אחרת ה-IC יתקדם פי 2.
- */
 void add_to_code_image(unsigned long machine_code, int *IC, InstructionNode **inst_head) {
     InstructionWord word;
     word.machine_code = machine_code;

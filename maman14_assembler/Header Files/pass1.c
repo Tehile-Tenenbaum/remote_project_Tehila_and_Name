@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include "globals.h"
@@ -7,174 +8,211 @@
 #include "parser.h"
 #include "utils.h"
 #include "macro.h"
-#define IC_INIT_VALUE 100
-#define DC_INIT_VALUE 0
+#include "error.h"
 
-/* Helper functions assumed to be implemented in parsing modules */
-/*
- * Function: execute_pass1
- * -----------------------
- * Executes the first pass algorithm on the .am file as defined in the syllabus.
- * @param filename: The base name of the source file.
- * @param symbol_table: Pointer to the symbol table.
- * @param ICF: Pointer to store the final Instruction Counter.
- * @param DCF: Pointer to store the final Data Counter.
- * @return: TRUE if no errors were found, FALSE otherwise.
- */
-boolean execute_pass1(char *filename, SymbolNode **symbol_table, InstructionNode **inst_head, DataNode **data_head, int *ICF, int *DCF, MacroNode *macro_table) {
+#ifndef DC_INIT_VALUE
+#define DC_INIT_VALUE 0
+#endif
+
+boolean execute_pass1(const char *filename, SymbolNode **symbol_table, InstructionNode **inst_head, DataNode **data_head, int *ICF, int *DCF, MacroNode *macro_table) {
     FILE *file;
     char line[MAX_LINE_LENGTH];
-    char file_with_extension[MAX_LINE_LENGTH];
+    char *file_with_extension;
+    size_t len;
     
-    /* Step 1: Initialize IC to 100, DC to 0 */
     int IC = IC_INIT_VALUE; 
     int DC = DC_INIT_VALUE;   
     int line_number = 0;
-    boolean error_found = FALSE;
-   char ext_label[MAX_LABEL_LENGTH];
- char current_word[MAX_LINE_LENGTH];
-    strcpy(file_with_extension, filename);
-    strcat(file_with_extension, ".am");
+    
+    char ext_label[MAX_LINE_LENGTH];
+    char current_word[MAX_LINE_LENGTH];
+
+    /* Reset global error flag for the current file */
+    error_found = FALSE;
+
+    len = strlen(filename);
+    file_with_extension = (char *)malloc(len + 4); /* For ".am" and '\0' */
+    if (file_with_extension == NULL) {
+        printf("Memory allocation failed for filename.\n");
+        return FALSE;
+    }
+
+    sprintf(file_with_extension, "%s.am", filename);
 
     file = fopen(file_with_extension, "r");
     if (file == NULL) {
-        printf("Error: Cannot open file %s\n", file_with_extension);
+        report_error(file_with_extension, 0, "Cannot open file.");
+        free(file_with_extension);
         return FALSE; 
     }
 
-    /* Step 2: Read the file line by line */
     while (fgets(line, MAX_LINE_LENGTH, file) != NULL) {
         char first_word[MAX_LINE_LENGTH];
-        char label_name[MAX_LABEL_LENGTH];
+        char label_name[MAX_LINE_LENGTH];
         int index = 0;
         boolean has_label = FALSE;
         
         line_number++;
-          /* בדיקת אורך השורה: אם אין ירידת שורה ולא הגענו לסוף הקובץ, השורה ארוכה מדי */
+
+        /* Check for maximum line length */
         if (strchr(line, '\n') == NULL && !feof(file)) {
             int c;
-            printf("Error at line %d: Line exceeds maximum length of 80 characters.\n", line_number);
-            error_found = TRUE;
-            
-            /* ניקוי החוצץ (Buffer) עד סוף השורה כדי למנוע גלישה לאיטרציה הבאה */
-        
-            while ((c = fgetc(file)) != '\n' && c != EOF);
-            
-            continue; /* מדלגים על עיבוד השורה השגויה ועוברים לשורה הבאה */
+            report_error(file_with_extension, line_number, "Line exceeds maximum length of 80 characters.");
+            while ((c = fgetc(file)) != '\n' && c != EOF); /* Clear buffer */
+            continue; 
         }
-        /* Step 3: Skip comments and empty lines */
+   
         skip_white_spaces(line, &index);
         if (line[index] == ';' || line[index] == '\n' || line[index] == '\r' || line[index] == '\0') {
             continue; 
         }
         
-        /* Step 4: Check if the first field is a label */
+        if (line[index] == ',') {
+            report_error(file_with_extension, line_number, "Illegal comma at the beginning of the line.");
+            continue;
+        }
+        
+        /* Check if the first field is a label */
         if (sscanf(&line[index], "%s", first_word) == 1) {
-            if (first_word[strlen(first_word) - 1] == ':') {
-                /* Step 5: Turn on "has label" flag */
-                has_label = TRUE;
-                first_word[strlen(first_word) - 1] = '\0'; /* Remove colon */
-                strcpy(label_name, first_word);
-                
-      
-                if (!is_valid_label_name(label_name)) {
-                    printf("Error in %s at line %d: Invalid label name '%s'\n", file_with_extension, line_number, label_name);
-                    error_found = TRUE;
-                } else if (is_macro_name(label_name, macro_table)) {
-                    printf("Error at line %d: Label '%s' is already used as a macro name\n", line_number, label_name);
-                    error_found = TRUE;
+            char *colon_ptr = strchr(first_word, ':');
+            
+            if (colon_ptr != NULL) {
+                if (colon_ptr == first_word + strlen(first_word) - 1) {
+                    has_label = TRUE;
+                    first_word[strlen(first_word) - 1] = '\0'; 
+                    strcpy(label_name, first_word);
+                    
+                   if (strlen(label_name) >= MAX_LABEL_LENGTH) {
+                        report_error(file_with_extension, line_number, "Symbol name '%s' exceeds the maximum allowed length of 31 characters.", label_name);
+                        continue; /* מדלגים לשורה הבאה כדי למנוע שגיאות שרשרת */
+                    } else if (!is_valid_label_name(label_name)) {
+                        report_error(file_with_extension, line_number, "Invalid label name '%s'.", label_name);
+                        continue; /* מדלגים לשורה הבאה כדי למנוע שגיאות שרשרת */
+                    } else if (is_macro_name(label_name, macro_table)) {
+                        report_error(file_with_extension, line_number, "Label '%s' is already used as a macro name.", label_name);
+                        continue; /* מדלגים לשורה הבאה כדי למנוע שגיאות שרשרת */
+                    }
+                    
+                    while (line[index] != ':' && line[index] != '\0') index++;
+                    index++; 
+                    skip_white_spaces(line, &index);
+                } else {
+                    report_error(file_with_extension, line_number, "Missing white space after the colon in label definition.");
+                    continue; 
                 }
-                /* Advance index past the label */
-                while (line[index] != ':' && line[index] != '\0') index++;
-                index++; /* skip the colon */
-                skip_white_spaces(line, &index);
+          } else {
+                /* בדיקה: האם יש רווח לפני הנקודתיים */
+                int temp_idx = index + strlen(first_word);
+                skip_white_spaces(line, &temp_idx);
+                if (line[temp_idx] == ':') {
+                    report_error(file_with_extension, line_number, "Space is not allowed before colon in label definition.");
+                    continue; /* מדלגים לשורה הבאה */
+                }
             }
         }
         
-        /* Read the next word (or first word if no label) to determine sentence type */
-       
-        if (sscanf(&line[index], "%s", current_word) != 1) {
-            continue; /* Empty line after label */
+      if (sscanf(&line[index], "%s", current_word) != 1) {
+            if (has_label) {
+                report_error(file_with_extension, line_number, "Label definition must be followed by an instruction or a directive.");
+            }
+            continue; 
         }
-
-        /* Step 6: Is it a data directive? (.db, .dw, .dh, .asciz) */
+        
+        /* Handle data directives (.db, .dw, .dh, .asciz) */
         if (is_data_directive(current_word)) {
-            /* Step 7: If there's a label, insert to symbol table with value DC and attribute 'data' */
             if (has_label) {
                 if (find_symbol(*symbol_table, label_name) != NULL) {
-                   printf("Error in %s at line %d: Label '%s' already defined\n", file_with_extension, line_number, label_name);
-                    error_found = TRUE;
+                    report_error(file_with_extension, line_number, "Label '%s' is already defined.", label_name);
                 } else {
-                    add_symbol(symbol_table, label_name, DC, SYMBOL_TYPE_DATA,line_number);
+                    add_symbol(symbol_table, label_name, DC, SYMBOL_TYPE_DATA, line_number, file_with_extension);
                 }
             }
-            /* Step 8: Identify data type, encode to data image, update DC */
+            
             index += strlen(current_word);
-            if (!process_data_directive(line, &index, &DC, current_word, data_head)) {
-                printf("Error in %s at line %d: Invalid data directive syntax\n", file_with_extension, line_number);
-                error_found = TRUE;
-            }
-            continue; /* Go to next line (Step 2) */
+            process_data_directive(line, &index, &DC, current_word, data_head, line_number, file_with_extension);
+            continue; 
         }
-        
-        /* Step 9: Is it an .extern or .entry directive? */
+
+        /* Handle .extern or .entry directives */
         if (is_extern_directive(current_word) || is_entry_directive(current_word)) {
-            /* Step 10: If .entry, do nothing in Pass 1 */
             if (is_entry_directive(current_word)) {
+                char entry_label[MAX_LINE_LENGTH];
+                int temp_index = index + strlen(current_word);
+                int chars_read = 0; 
+                
+                skip_white_spaces(line, &temp_index);
+                if (sscanf(&line[temp_index], "%s%n", entry_label, &chars_read) == 1) {
+                    if (!is_valid_label_name(entry_label)) {
+                        report_error(file_with_extension, line_number, "Invalid label after .entry.");
+                    } else if (!check_no_garbage(line, temp_index + chars_read)) { 
+                        report_error(file_with_extension, line_number, "Extraneous text after end of command.");
+                    } else {
+                        SymbolNode *existing = find_symbol(*symbol_table, entry_label);
+                        if (existing != NULL && existing->type == SYMBOL_TYPE_EXTERNAL) {
+                            report_error(file_with_extension, line_number, "Symbol '%s' cannot be defined as both .extern and .entry.", entry_label);
+                        }
+                    }
+                }
                 continue; 
             }
             
-            /* Step 11: If .extern, insert operand to symbol table with attribute 'external' */
             if (is_extern_directive(current_word)) {
-
+                int chars_read = 0;
                 index += strlen(current_word);
                 skip_white_spaces(line, &index);
                 
-                if (sscanf(&line[index], "%s", ext_label) == 1) {
+                if (sscanf(&line[index], "%s%n", ext_label, &chars_read) == 1) {
                     if (!is_valid_label_name(ext_label)) {
-                         printf("Error in %s at line %d: Invalid extern label\n",file_with_extension, line_number);
-                         error_found = TRUE;
+                         report_error(file_with_extension, line_number, "Invalid extern label.");
+                    } else if (!check_no_garbage(line, index + chars_read)) { 
+                         report_error(file_with_extension, line_number, "Extraneous text after end of command.");
                     } else {
-                         add_symbol(symbol_table, ext_label, 0, SYMBOL_TYPE_EXTERNAL,line_number);
+                         SymbolNode *existing = find_symbol(*symbol_table, ext_label);
+                         if (existing != NULL) {
+                             if (existing->type != SYMBOL_TYPE_EXTERNAL) {
+                                 report_error(file_with_extension, line_number, "Symbol '%s' already defined locally.", ext_label);
+                             }
+                         } else {
+                             add_symbol(symbol_table, ext_label, 0, SYMBOL_TYPE_EXTERNAL, line_number, file_with_extension);
+                         }
                     }
                 }
             }
-            continue; /* Go to next line (Step 2) */
+            continue;
         }
-        
-        /* Step 12: If not a directive, it must be a code instruction */
-        /* Step 13: If there's a label, insert to symbol table with value IC and attribute 'code' */
+
+        /* Unknown directive */
+        if (current_word[0] == '.') {
+            report_error(file_with_extension, line_number, "Unknown directive '%s'.", current_word);
+            continue;
+        }
+
+        /* If not a directive, it must be a code instruction */
         if (has_label) {
             if (find_symbol(*symbol_table, label_name) != NULL) {
-          printf("Error in %s at line %d: Label '%s' already defined\n", file_with_extension, line_number, label_name);
-                error_found = TRUE;
+                report_error(file_with_extension, line_number, "Label '%s' is already defined.", label_name);
             } else {
-                add_symbol(symbol_table, label_name, IC, SYMBOL_TYPE_CODE,line_number);
+                add_symbol(symbol_table, label_name, IC, SYMBOL_TYPE_CODE, line_number, file_with_extension);
             }
         }
         
-        /* Step 14 & 16: Encode instruction partially, update IC by 4 */
         index += strlen(current_word);
-       if (!process_instruction(line, &index, &IC, current_word, inst_head,line_number, file_with_extension)) {
-           
-            error_found = TRUE;
-        } 
+        process_instruction(line, &index, &IC, current_word, inst_head, line_number, file_with_extension);
     }
 
     fclose(file);
 
-    /* Step 17: Stop if errors were found */
+    /* Stop if any errors were reported via report_error() */
     if (error_found) {
+        free(file_with_extension);
         return FALSE;
     }
 
-    /* Step 18: Save final IC and DC values */
     *ICF = IC;
     *DCF = DC;
 
-    /* Step 19 & 20: Update all 'data' symbols value by adding ICF */
     update_data_symbols(*symbol_table, *ICF);
-    /* Note: Updating the data image addresses is usually handled implicitly when writing the final output */
 
+    free(file_with_extension);
     return TRUE;
 }

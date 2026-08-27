@@ -7,30 +7,30 @@
 /*
  * Checks if a given word is a reserved assembly word.
  */
-boolean is_reserved_word(char *word) {
+boolean is_reserved_word(const char *word) {
     int i;
-    char *reserved_words[] = {
-        /* פעולות מסוג R */
-        "add", "sub", "and", "or", "nor",
-        "move", "mvhi", "mvlo",
-        /* פעולות מסוג I */
-        "addi", "subi", "andi", "ori", "nori",
-        "beq", "bne", "blt", "bgt",
-        "lb", "sb", "lw", "sw", "lh", "sh",
-        /* פעולות מסוג J */
-        "jmp", "la", "call", "hlt",
-        /* הנחיות */
-        ".db", ".dw", ".dh", ".asciz", ".entry", ".extern","asciz","dh","dw","db"
-        /* מאקרו */
-        "mcro", "mcroend"
+    /* המערך הוגדר כאן כסטטי כדי שלא יווצר מחדש בכל קריאה לפונקציה, 
+       וכעת הוא מקומי ולא נחשב כמשתנים גלובליים! */
+    static const char *reserved_words[] = {S        "mcro", "mcroend", 
+        "add", "sub", "and", "or", "nor", "move", "mvhi", "mvlo", /* R-Type */
+        "addi", "subi", "andi", "ori", "nori", "bne", "beq", "blt", "bgt", "lb","sb","lw","sw","lh","sh", /* I-Type */
+        "jmp", "la", "call", "hlt", /* J-Type */
+        ".db", ".dw", ".dh", ".asciz", ".entry", ".extern",
+        "db", "dw", "dh", "asciz", "entry", "extern",
+        "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9",
+        "$10", "$11", "$12", "$13", "$14", "$15", "$16", "$17", "$18", "$19",
+        "$20", "$21", "$22", "$23", "$24", "$25", "$26", "$27", "$28", "$29",
+        "$30", "$31"
     };
-    int num_reserved = sizeof(reserved_words) / sizeof(reserved_words[0]);
+    
+    int num_reserved_words = sizeof(reserved_words) / sizeof(reserved_words[0]);
 
-    for (i = 0; i < num_reserved; i++) {
+    for (i = 0; i < num_reserved_words; i++) {
         if (strcmp(word, reserved_words[i]) == 0) {
             return TRUE;
         }
     }
+    
     return FALSE;
 }
 /*

@@ -1,9 +1,13 @@
 #ifndef PARSER_H
 #define PARSER_H
+
+#include "globals.h"
+#include "image.h"
+
 #define MAX_OPERANDS 3
 #define MAX_REGISTER 31
 
-/* הזזות סיביות (Bit Shifts) לקידוד פקודות */
+/* Bit Shifts for Instruction Encoding */
 #define OPCODE_SHIFT 26
 #define RS_SHIFT     21
 #define RT_SHIFT     16
@@ -11,7 +15,7 @@
 #define FUNCT_SHIFT  6
 #define J_REG_SHIFT  25
 
-/* אופקודים (Opcodes) */
+/* Opcodes */
 #define OPCODE_R_ARITH  0UL
 #define OPCODE_R_MOVE   1UL
 
@@ -38,7 +42,7 @@
 #define OPCODE_CALL 32UL
 #define OPCODE_HLT  63UL
 
-/* קודי פעולה (Funct) לפקודות R */
+/* Funct Codes for R-Type Instructions */
 #define FUNCT_ADD  1UL
 #define FUNCT_SUB  2UL
 #define FUNCT_AND  3UL
@@ -49,27 +53,49 @@
 #define FUNCT_MVHI 2UL
 #define FUNCT_MVLO 3UL
 
-/* גבולות ערכים (Limits) למשתנים ונתונים */
+/* Limits for Immediate and Data Values */
 #define MIN_IMMED -32768
 #define MAX_IMMED 32767
 
 #define MIN_DB -128
-#define MAX_DB 255
+#define MAX_DB 127
 #define MIN_DH -32768
-#define MAX_DH 65535
+#define MAX_DH 32767
 #define MIN_DW -2147483648L
-#define MAX_DW 4294967295L
-/* Assuming globals.h defines MAX_LINE_LENGTH, TRUE, FALSE, and boolean */
-#include "globals.h"
-#include "image.h"
+#define MAX_DW 2147483647L
 
-boolean process_data_directive(char *line, int *index, int *DC, char *directive, DataNode **data_head);
-int split_operands(char *line, int *index, char tokens[3][32]);
- boolean parse_register(char *token, int *reg_num, int line_number, char *filename);
-boolean process_instruction(char *line, int *index, int *IC, char *operation, InstructionNode **inst_head, int line_number, char *filename);
+/**
+ * @brief Processes a data directive (.db, .dh, .dw, .asciz) and updates the data image.
+ */
+boolean process_data_directive(char *line, int *index, int *DC, const char *directive, DataNode **data_head, int line_number, const char *filename);
+
+/**
+ * @brief Splits the operands of an instruction based on strict comma rules.
+ */
+int split_operands(char *line, int *index, char tokens[MAX_OPERANDS][MAX_LABEL_LENGTH], int line_number, const char *filename);
+
+/**
+ * @brief Parses a string token to verify it's a valid register and extracts its number.
+ */
+boolean parse_register(const char *token, int *reg_num, int line_number, const char *filename);
+
+/**
+ * @brief Analyzes a code instruction, parses its operands, and encodes it into the instruction image.
+ */
+boolean process_instruction(char *line, int *index, int *IC, const char *operation, InstructionNode **inst_head, int line_number, const char *filename);
+
+/**
+ * @brief Adds a multi-byte value to the data image.
+ */
 void add_to_data_image(long value, int size_in_bytes, int *DC, DataNode **data_head);
+
+/**
+ * @brief Adds a fully encoded 32-bit machine code word to the instruction image.
+ */
 void add_to_code_image(unsigned long machine_code, int *IC, InstructionNode **inst_head);
-boolean is_data_directive(char *word);
-boolean is_entry_directive(char *word);
-boolean is_extern_directive(char *word);
+
+boolean is_data_directive(const char *word);
+boolean is_entry_directive(const char *word);
+boolean is_extern_directive(const char *word);
+
 #endif /* PARSER_H */
